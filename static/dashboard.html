@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevTrackr - Dashboard</title>
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #1c2128;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --success: #3fb950;
+            --warning: #f0883e;
+            --danger: #f85149;
+            --border: #30363d;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header Section */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 30px 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 30px;
+        }
+
+        .header-left h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-left p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .github-username {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .github-username:hover {
+            background-color: var(--bg-tertiary);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .github-badge {
+            width: 24px;
+            height: 24px;
+            background-color: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        /* Trainer Message Box */
+        .trainer-message {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+
+        .trainer-icon {
+            width: 48px;
+            height: 48px;
+            background-color: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 24px;
+        }
+
+        .trainer-content h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--accent);
+        }
+
+        .trainer-content p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .stat-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(88, 166, 255, 0.15);
+        }
+
+        .stat-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+        }
+
+        .stat-icon {
+            width: 32px;
+            height: 32px;
+            background-color: var(--bg-tertiary);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .stat-card.success .stat-icon {
+            background-color: rgba(63, 185, 80, 0.15);
+            color: var(--success);
+        }
+
+        .stat-card.warning .stat-icon {
+            background-color: rgba(240, 136, 62, 0.15);
+            color: var(--warning);
+        }
+
+        .stat-card.info .stat-icon {
+            background-color: rgba(88, 166, 255, 0.15);
+            color: var(--accent);
+        }
+
+        .stat-card.danger .stat-icon {
+            background-color: rgba(248, 81, 73, 0.15);
+            color: var(--danger);
+        }
+
+        .stat-card.success .stat-value {
+            color: var(--success);
+        }
+
+        .stat-card.warning .stat-value {
+            color: var(--warning);
+        }
+
+        .stat-card.info .stat-value {
+            color: var(--accent);
+        }
+
+        .stat-card.danger .stat-value {
+            color: var(--danger);
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .stat-description {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .stat-trend {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 4px 8px;
+            background-color: rgba(63, 185, 80, 0.15);
+            color: var(--success);
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Main Content Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Weekly Commits Section */
+        .chart-section {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 350px;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 20px;
+        }
+
+        .chart-canvas {
+            max-height: 300px;
+        }
+
+        .chart-loading {
+            height: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .chart-error {
+            height: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 20px;
+        }
+
+        .error-icon {
+            font-size: 48px;
+        }
+
+        .error-text {
+            color: var(--danger);
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .error-details {
+            color: var(--text-secondary);
+            font-size: 12px;
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        /* Daily Quests Section */
+        .quests-section {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+        }
+
+        .quest-item {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            padding: 16px;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .quest-item:hover {
+            border-color: var(--accent);
+            background-color: rgba(88, 166, 255, 0.05);
+        }
+
+        .quest-checkbox {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            flex-shrink: 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .quest-item:hover .quest-checkbox {
+            border-color: var(--accent);
+        }
+
+        .quest-checkbox.checked {
+            background-color: var(--success);
+            border-color: var(--success);
+        }
+
+        .quest-checkbox.checked::after {
+            content: '✓';
+            color: var(--bg-primary);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .quest-item.completed .quest-content h4 {
+            text-decoration: line-through;
+            color: var(--text-secondary);
+        }
+
+        .quest-content h4 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .quest-content p {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .quest-reward {
+            margin-top: 8px;
+            padding: 4px 8px;
+            background-color: rgba(240, 136, 62, 0.15);
+            color: var(--warning);
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        /* Task Creation Form */
+        .quest-create-form {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .quest-input {
+            flex: 1;
+            padding: 10px 12px;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+
+        .quest-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .quest-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            background-color: rgba(88, 166, 255, 0.05);
+        }
+
+        .quest-btn {
+            padding: 10px 16px;
+            background-color: var(--accent);
+            border: none;
+            border-radius: 6px;
+            color: var(--bg-primary);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .quest-btn:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .quest-btn:active {
+            transform: translateY(0);
+        }
+
+        .quest-btn:disabled {
+            background-color: var(--text-secondary);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .quest-loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-quests {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-quests-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .empty-quests p {
+            font-size: 14px;
+        }
+
+        /* Footer Section */
+        footer {
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        footer a:hover {
+            color: var(--accent-hover);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+
+            header {
+                flex-direction: column;
+                gap: 16px;
+                align-items: flex-start;
+            }
+
+            .github-username {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .trainer-message {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .trainer-icon {
+                margin: 0 auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="header-left">
+                <h1>DevTrackr</h1>
+                <p>Your GitHub commit tracking dashboard</p>
+            </div>
+            <a href="https://github.com/semmozhiyan-dev" class="github-username" target="_blank">
+                <div class="github-badge">@</div>
+                <span>semmozhiyan-dev</span>
+            </a>
+        </header>
+
+        <!-- Trainer Message -->
+        <div class="trainer-message">
+            <div class="trainer-icon">🤖</div>
+            <div class="trainer-content">
+                <h3>Trainer Alert</h3>
+                <p>Keep up your commit streak! You're doing great. Today's goal: Push at least 1 commit. Let's build something amazing!</p>
+            </div>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <!-- Today's Commits -->
+            <div class="stat-card success" id="todayCommitsCard">
+                <div class="stat-card-header">
+                    <span class="stat-label">Today's Commits</span>
+                    <div class="stat-icon">📝</div>
+                </div>
+                <div class="stat-value" id="todayCommitsValue">--</div>
+                <p class="stat-description">Commits from today</p>
+                <div class="stat-trend" id="todayCommitsTrend">Loading...</div>
+            </div>
+
+            <!-- Current Streak -->
+            <div class="stat-card warning" id="streakCard">
+                <div class="stat-card-header">
+                    <span class="stat-label">Current Streak</span>
+                    <div class="stat-icon" id="streakIcon">🔥</div>
+                </div>
+                <div class="stat-value" id="streakValue">--</div>
+                <p class="stat-description">Days committed in a row</p>
+                <div class="stat-trend" id="streakTrend">Loading...</div>
+            </div>
+
+            <!-- Total Repos -->
+            <div class="stat-card info">
+                <div class="stat-card-header">
+                    <span class="stat-label">Total Repos</span>
+                    <div class="stat-icon">📦</div>
+                </div>
+                <div class="stat-value">18</div>
+                <p class="stat-description">Active repositories</p>
+                <div class="stat-trend">↑ 3 this month</div>
+            </div>
+
+            <!-- Weekly Total -->
+            <div class="stat-card info">
+                <div class="stat-card-header">
+                    <span class="stat-label">Weekly Total</span>
+                    <div class="stat-icon">📊</div>
+                </div>
+                <div class="stat-value">42</div>
+                <p class="stat-description">Commits this week</p>
+                <div class="stat-trend">↑ 15% vs last week</div>
+            </div>
+        </div>
+
+        <!-- Main Grid: Chart + Quests -->
+        <div class="main-grid">
+            <!-- Weekly Commits Chart -->
+            <div class="chart-section">
+                <h2 class="section-title">Weekly Commit Activity</h2>
+                <div id="chartContainer" class="chart-container">
+                    <div class="chart-loading">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text">Loading commit data...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Quests -->
+            <div class="quests-section">
+                <h2 class="section-title">Daily Quests</h2>
+                
+                <!-- Task Creation Form -->
+                <div class="quest-create-form">
+                    <input 
+                        type="text" 
+                        id="questInput" 
+                        class="quest-input" 
+                        placeholder="Add a new quest..."
+                        maxlength="500"
+                    >
+                    <button id="questBtn" class="quest-btn">Add</button>
+                </div>
+
+                <!-- Tasks Container -->
+                <div id="questsList">
+                    <div class="quest-loading">
+                        <div class="loading-spinner" style="width: 30px; height: 30px; border-width: 2px;"></div>
+                        <div class="loading-text">Loading quests...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <p>DevTrackr © 2024 | Built with <span style="color: var(--danger);">❤️</span> | <a href="#">API Docs</a> | <a href="#">GitHub</a></p>
+        </footer>
+    </div>
+
+    <script>
+        // Chart.js configuration for dark theme
+        const chartConfig = {
+            primaryText: '#e6edf3',
+            secondaryText: '#8b949e',
+            accent: '#58a6ff',
+            success: '#3fb950',
+            bg: '#1c2128',
+            border: '#30363d'
+        };
+
+        // Set Chart.js default options
+        Chart.defaults.color = chartConfig.secondaryText;
+        Chart.defaults.borderColor = chartConfig.border;
+
+        /**
+         * Fetch commit data from the API and render the chart
+         */
+        async function loadWeeklyCommitsChart() {
+            const container = document.getElementById('chartContainer');
+            
+            try {
+                // Fetch data from the API
+                const response = await fetch('/commits/weekly');
+                
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Check if data is empty
+                if (!Array.isArray(data) || data.length === 0) {
+                    showEmptyState(container);
+                    return;
+                }
+                
+                // Prepare data for chart
+                const labels = data.map(item => formatDate(item.date));
+                const commitCounts = data.map(item => item.total_commits);
+                
+                // Create canvas element
+                const canvas = document.createElement('canvas');
+                canvas.className = 'chart-canvas';
+                container.innerHTML = '';
+                container.appendChild(canvas);
+                
+                // Create the bar chart
+                new Chart(canvas, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Commits per Day',
+                            data: commitCounts,
+                            backgroundColor: chartConfig.accent,
+                            borderColor: chartConfig.accent,
+                            borderWidth: 0,
+                            borderRadius: 6,
+                            hoverBackgroundColor: '#79c0ff',
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'x',
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: {
+                                    color: chartConfig.primaryText,
+                                    font: {
+                                        size: 12,
+                                        weight: '600'
+                                    },
+                                    padding: 16,
+                                    usePointStyle: true
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(13, 17, 23, 0.9)',
+                                titleColor: chartConfig.primaryText,
+                                bodyColor: chartConfig.primaryText,
+                                borderColor: chartConfig.border,
+                                borderWidth: 1,
+                                padding: 12,
+                                displayColors: false,
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.parsed.y + ' commit' + (context.parsed.y !== 1 ? 's' : '');
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    color: chartConfig.secondaryText,
+                                    font: {
+                                        size: 11
+                                    },
+                                    stepSize: 1
+                                },
+                                grid: {
+                                    color: 'rgba(48, 54, 61, 0.5)',
+                                    drawBorder: false
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    color: chartConfig.secondaryText,
+                                    font: {
+                                        size: 11
+                                    }
+                                },
+                                grid: {
+                                    display: false,
+                                    drawBorder: false
+                                }
+                            }
+                        }
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Error loading chart data:', error);
+                showErrorState(container, error.message);
+            }
+        }
+
+        /**
+         * Format date string from YYYY-MM-DD to readable format
+         */
+        function formatDate(dateStr) {
+            const date = new Date(dateStr + 'T00:00:00');
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const dayName = days[date.getDay()];
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            return `${dayName} ${month}/${day}`;
+        }
+
+        /**
+         * Show error state
+         */
+        function showErrorState(container, errorMessage) {
+            container.innerHTML = `
+                <div class="chart-error">
+                    <div class="error-icon">⚠️</div>
+                    <div class="error-text">Failed to load commits data</div>
+                    <div class="error-details">${errorMessage}</div>
+                </div>
+            `;
+        }
+
+        /**
+         * Show empty state
+         */
+        function showEmptyState(container) {
+            container.innerHTML = `
+                <div class="chart-error">
+                    <div class="error-icon">📊</div>
+                    <div class="error-text">No commit data available</div>
+                    <div class="error-details">Sync your GitHub commits to see activity here</div>
+                </div>
+            `;
+        }
+
+        // Load the chart when the page is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initDashboard);
+        } else {
+            initDashboard();
+        }
+
+        /**
+         * Load and update streak data
+         */
+        async function loadStreakData() {
+            try {
+                const response = await fetch('/streak');
+                if (!response.ok) throw new Error('API Error: ' + response.status);
+                
+                const data = await response.json();
+                const streakDays = data.streak_days || 0;
+                
+                // Get card elements
+                const streakCard = document.getElementById('streakCard');
+                const streakValue = document.getElementById('streakValue');
+                const streakTrend = document.getElementById('streakTrend');
+                const streakIcon = document.getElementById('streakIcon');
+                
+                // Update values
+                streakValue.textContent = streakDays;
+                
+                // Update styling based on streak length
+                streakCard.classList.remove('warning', 'success', 'danger', 'info');
+                
+                if (streakDays === 0) {
+                    // Red warning
+                    streakCard.classList.add('danger');
+                    streakIcon.textContent = '⚠️';
+                    streakTrend.textContent = 'Start a new streak today!';
+                } else if (streakDays >= 1 && streakDays <= 4) {
+                    // Yellow warning
+                    streakCard.classList.add('warning');
+                    streakIcon.textContent = '⏳';
+                    streakTrend.textContent = 'Keep the momentum!';
+                } else if (streakDays >= 5) {
+                    // Green success
+                    streakCard.classList.add('success');
+                    streakIcon.textContent = '🔥';
+                    streakTrend.textContent = 'Amazing streak!';
+                }
+                
+            } catch (error) {
+                console.error('Error loading streak data:', error);
+                document.getElementById('streakValue').textContent = '0';
+                document.getElementById('streakTrend').textContent = 'Error loading data';
+            }
+        }
+
+        /**
+         * Load and update today's commit count
+         */
+        async function loadTodayCommits() {
+            try {
+                const response = await fetch('/commits/weekly');
+                if (!response.ok) throw new Error('API Error: ' + response.status);
+                
+                const data = await response.json();
+                
+                // Get today's date
+                const today = new Date().toISOString().split('T')[0];
+                
+                // Find today's commits
+                const todayData = data.find(item => item.date === today);
+                const todayCount = todayData ? todayData.total_commits : 0;
+                
+                // Update values
+                document.getElementById('todayCommitsValue').textContent = todayCount;
+                
+                if (todayCount === 0) {
+                    document.getElementById('todayCommitsTrend').textContent = 'No commits yet today';
+                } else if (todayCount === 1) {
+                    document.getElementById('todayCommitsTrend').textContent = 'Good start!';
+                } else if (todayCount < 5) {
+                    document.getElementById('todayCommitsTrend').textContent = todayCount + ' commits so far';
+                } else {
+                    document.getElementById('todayCommitsTrend').textContent = 'Great progress: ' + todayCount + ' commits!';
+                }
+                
+            } catch (error) {
+                console.error('Error loading today commits:', error);
+                document.getElementById('todayCommitsValue').textContent = '0';
+                document.getElementById('todayCommitsTrend').textContent = 'Error loading data';
+            }
+        }
+
+        /**
+         * Initialize all data loading on page ready
+         */
+        function initDashboard() {
+            loadStreakData();
+            loadTodayCommits();
+            loadWeeklyCommitsChart();
+            loadTodayQuests();
+            setupQuestForm();
+        }
+
+        /**
+         * Load and render today's quests from the API
+         */
+        async function loadTodayQuests() {
+            try {
+                const response = await fetch('/tasks/today');
+                if (!response.ok) throw new Error('API Error: ' + response.status);
+                
+                const tasks = await response.json();
+                renderQuests(tasks);
+                
+            } catch (error) {
+                console.error('Error loading quests:', error);
+                document.getElementById('questsList').innerHTML = 
+                    '<div class="empty-quests"><div class="empty-quests-icon">⚠️</div><p>Error loading quests</p></div>';
+            }
+        }
+
+        /**
+         * Render quests to the DOM
+         */
+        function renderQuests(tasks) {
+            const questsList = document.getElementById('questsList');
+            
+            if (!tasks || tasks.length === 0) {
+                questsList.innerHTML = 
+                    '<div class="empty-quests"><div class="empty-quests-icon">🎉</div><p>No quests for today!</p><p style="font-size: 12px; margin-top: 8px; opacity: 0.7;">Add one above to get started</p></div>';
+                return;
+            }
+            
+            questsList.innerHTML = tasks.map(task => {
+                const isCompleted = task.status === 'completed';
+                return `
+                    <div class="quest-item ${isCompleted ? 'completed' : ''}" data-task-id="${task.id}">
+                        <div class="quest-checkbox ${isCompleted ? 'checked' : ''}" onclick="toggleTask(${task.id})"></div>
+                        <div class="quest-content">
+                            <h4>${escapeHtml(task.task)}</h4>
+                            <p>${task.date}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Toggle task completion status
+         */
+        async function toggleTask(taskId) {
+            try {
+                const response = await fetch('/tasks/' + taskId + '/done', { method: 'PATCH' });
+                if (!response.ok) throw new Error('API Error: ' + response.status);
+                
+                // Reload quests to reflect the change
+                loadTodayQuests();
+                
+            } catch (error) {
+                console.error('Error updating task:', error);
+                alert('Failed to update task');
+            }
+        }
+
+        /**
+         * Set up the quest creation form
+         */
+        function setupQuestForm() {
+            const input = document.getElementById('questInput');
+            const btn = document.getElementById('questBtn');
+            
+            // Handle button click
+            btn.addEventListener('click', createNewQuest);
+            
+            // Handle Enter key
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    createNewQuest();
+                }
+            });
+        }
+
+        /**
+         * Create a new quest
+         */
+        async function createNewQuest() {
+            const input = document.getElementById('questInput');
+            const btn = document.getElementById('questBtn');
+            const taskName = input.value.trim();
+            
+            if (!taskName) {
+                input.focus();
+                return;
+            }
+            
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Adding...';
+                
+                const response = await fetch('/tasks?task_name=' + encodeURIComponent(taskName), {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) throw new Error('API Error: ' + response.status);
+                
+                // Clear input
+                input.value = '';
+                input.focus();
+                
+                // Reload quests
+                await loadTodayQuests();
+                
+            } catch (error) {
+                console.error('Error creating task:', error);
+                alert('Failed to create quest');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Add';
+            }
+        }
+
+        /**
+         * Escape HTML to prevent XSS
+         */
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+    </script>
+</body>
+</html>
