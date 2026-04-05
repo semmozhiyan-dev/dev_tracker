@@ -6,7 +6,7 @@ from typing import Optional
 from collections import defaultdict
 from datetime import datetime, date, timedelta
 from sqlalchemy.orm import Session
-from app.config import GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_API_BASE
+from app.config import GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_API_BASE, validate_config, ConfigError
 from app.database import init_db, get_db
 from app.models import Commit, Task, TaskStatus
 
@@ -25,8 +25,16 @@ app.add_middleware(
 # Initialize database on startup
 @app.on_event("startup")
 def startup_event():
-    """Initialize database when the app starts."""
+    """Initialize database and validate configuration when the app starts."""
+    try:
+        validate_config()
+        print("✅ Configuration validated successfully")
+    except ConfigError as e:
+        print(f"❌ Configuration validation failed:\n{e}")
+        raise
+    
     init_db()
+    print("✅ Database initialized successfully")
 
 
 # Mount static files
