@@ -6,9 +6,12 @@ from typing import Optional
 from collections import defaultdict
 from datetime import datetime, date, timedelta
 from sqlalchemy.orm import Session
-from app.config import GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_API_BASE, validate_config, ConfigError
+from app.config import GITHUB_USERNAME, GITHUB_TOKEN, GITHUB_API_BASE, GROQ_API_KEY, validate_config, ConfigError
 from app.database import init_db, get_db
 from app.models import Commit, Task, TaskStatus
+from app.trainer import get_trainer_message
+from app.analyzer import analyze_with_groq, get_task_suggestions
+from groq import Groq
 
 app = FastAPI(title="DevTrackr", version="0.1.0")
 
@@ -612,6 +615,247 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=500,
             detail=f"Error deleting task: {str(e)}"
+        )
+
+
+@app.get("/trainer/message")
+def get_trainer_motivation(db: Session = Depends(get_db)):
+    """
+    Get a gym coach-style motivation message based on today's commits.
+    
+    Analyzes today's GitHub commit activity and returns an aggressive,
+    funny coaching message. The tone adapts based on performance:
+    - 0 commits: Harsh warning
+    - 1-4 commits: Motivational push
+    - 5+ commits: Celebration
+    
+    Returns:
+        JSON response with trainer message:
+        {
+            "message": "YOOO! You're DEAD, buddy! ZERO commits?!...",
+            "style": "danger",
+            "intensity": "MAXIMUM WARNING",
+            "commits_today": 0
+        }
+    """
+    try:
+        # Get today's date
+        today = date.today()
+        
+        # Query commits for today
+        today_commits = db.query(Commit).filter(
+            Commit.date == today
+        ).all()
+        
+        # Sum up all commits for today
+        total_commits = sum(commit.count for commit in today_commits)
+        
+        # Get the trainer message
+        trainer_response = get_trainer_message(total_commits)
+        
+        # Add the commit count to response
+        trainer_response["commits_today"] = total_commits
+        
+        return trainer_response
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating trainer message: {str(e)}"
+        )
+
+
+@app.get("/trainer/analyze")
+async def analyze_performance(db: Session = Depends(get_db)):
+    """
+    Get AI-powered performance analysis for the last 7 days of commits.
+    
+    Uses Groq's LLM to generate a drill sergeant style performance review
+    based on your commit history from the past 7 days. Requires GROQ_API_KEY
+    to be configured in your .env file.
+    
+    Returns:
+        JSON response with AI analysis:
+        {
+            "analysis": "You absolute beast! 15 commits this week...",
+            "commits_total": 15,
+            "unique_repositories": 3,
+            "active_days": 5,
+            "available": true
+        }
+        
+        If Groq API key is not configured:
+        {
+            "analysis": null,
+            "message": "Groq API key not configured. Add GROQ_API_KEY to your .env file.",
+            "available": false
+        }
+    """
+    try:
+        # Check if Groq API key is available
+        if not GROQ_API_KEY:
+            print("[Route] Groq API key not configured")
+            return {
+                "analysis": None,
+                "message": "Groq API key not configured. Add GROQ_API_KEY to your .env file.",
+                "available": False
+            }
+        
+        print("[Route] Groq API key found, proceeding with analysis")
+        
+        # Get the last 7 days
+        today = date.today()
+        seven_days_ago = today - timedelta(days=7)
+        
+        # Query commits from the last 7 days
+        commits = db.query(Commit).filter(
+            Commit.date >= seven_days_ago,
+            Commit.date <= today
+        ).all()
+        
+        print(f"[Route] Found {len(commits)} commits in last 7 days")
+        
+        # Convert to JSON-serializable format for analyzer
+        commits_data = [
+            {
+                "date": str(c.date),
+                "repo": c.repo,
+                "count": c.count
+            }
+            for c in commits
+        ]
+        
+        # Calculate summary stats
+        total_commits = sum(c.count for c in commits)
+        unique_repos = len(set(c.repo for c in commits))
+        active_days = len(set(c.date for c in commits))
+        
+        print(f"[Route] Initializing Groq client...")
+        # Initialize Groq client
+        groq_client = Groq(api_key=GROQ_API_KEY)
+        print(f"[Route] Groq client created, calling analyzer...")
+        
+        # Get AI analysis (not async, synchronous call)
+        analysis = analyze_with_groq(commits_data, groq_client)
+        print(f"[Route] Analysis result: {type(analysis)} - {bool(analysis)}")
+        
+        return {
+            "analysis": analysis,
+            "commits_total": total_commits,
+            "unique_repositories": unique_repos,
+            "active_days": active_days,
+            "available": True
+        }
+    
+    except Exception as e:
+        print(f"[Route] Error: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error analyzing performance: {str(e)}"
+        )
+
+
+@app.get("/trainer/suggest")
+def suggest_tasks(db: Session = Depends(get_db)):
+    """
+    Get AI-powered task suggestions for tomorrow based on recent commit activity.
+    
+    Uses Groq's LLM to suggest exactly 3 specific, actionable coding tasks
+    the developer should work on tomorrow based on their recent commit history
+    and repositories.
+    
+    Returns:
+        JSON response with task suggestions:
+        {
+            "suggestions": [
+                "Add error handling to user authentication flow",
+                "Refactor database queries to reduce N+1 problems",
+                "Write unit tests for payment processing module"
+            ],
+            "available": true,
+            "commits_analyzed": 6,
+            "repos_used": 2
+        }
+        
+        If Groq API key is not configured:
+        {
+            "suggestions": null,
+            "message": "Groq API key not configured",
+            "available": false
+        }
+    """
+    try:
+        # Check if Groq API key is available
+        if not GROQ_API_KEY:
+            print("[TaskSuggest] Groq API key not configured")
+            return {
+                "suggestions": None,
+                "message": "Groq API key not configured. Add GROQ_API_KEY to your .env file.",
+                "available": False
+            }
+        
+        print("[TaskSuggest] Starting task suggestion generation")
+        
+        # Get the last 30 days of commit data to provide context
+        today = date.today()
+        thirty_days_ago = today - timedelta(days=30)
+        
+        # Query commits from the last 30 days
+        commits = db.query(Commit).filter(
+            Commit.date >= thirty_days_ago,
+            Commit.date <= today
+        ).all()
+        
+        print(f"[TaskSuggest] Found {len(commits)} commits in last 30 days")
+        
+        # Convert to JSON-serializable format for analyzer
+        commits_data = [
+            {
+                "date": str(c.date),
+                "repo": c.repo,
+                "count": c.count
+            }
+            for c in commits
+        ]
+        
+        # Get unique repository names
+        unique_repos = sorted(set(c.repo for c in commits))
+        
+        print(f"[TaskSuggest] Working with {len(unique_repos)} unique repos: {unique_repos}")
+        
+        # Initialize Groq client
+        groq_client = Groq(api_key=GROQ_API_KEY)
+        print(f"[TaskSuggest] Groq client created, requesting suggestions...")
+        
+        # Get task suggestions from Groq
+        suggestions = get_task_suggestions(commits_data, unique_repos, groq_client)
+        
+        if not suggestions:
+            print("[TaskSuggest] Failed to get suggestions from Groq")
+            suggestions = [
+                "Review and refactor recent code changes",
+                "Add more comprehensive unit tests",
+                "Optimize database queries for performance"
+            ]
+        
+        print(f"[TaskSuggest] Generated {len(suggestions)} suggestions")
+        
+        return {
+            "suggestions": suggestions,
+            "available": True,
+            "commits_analyzed": len(commits),
+            "repos_used": len(unique_repos)
+        }
+    
+    except Exception as e:
+        print(f"[TaskSuggest] Error: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating task suggestions: {str(e)}"
         )
 
 

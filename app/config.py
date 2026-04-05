@@ -176,6 +176,9 @@ GITHUB_TOKEN = get_required_env("GITHUB_TOKEN", "GitHub personal access token fo
 # Load optional environment variables with sensible defaults
 GITHUB_API_BASE = get_optional_env("GITHUB_API_BASE", "https://api.github.com")
 
+# Groq AI Configuration (for /trainer/analyze endpoint)
+GROQ_API_KEY = get_optional_env("GROQ_API_KEY", None)
+
 # Database Configuration
 DATABASE_URL = get_optional_env(
     "DATABASE_URL",
