@@ -134,6 +134,143 @@
             line-height: 1.5;
         }
 
+        .ai-action-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .ai-action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .ai-action-btn:active {
+            transform: translateY(0);
+        }
+
+        .trainer-message.danger {
+            border-left: 4px solid #ff6b6b;
+        }
+
+        .trainer-message.warning {
+            border-left: 4px solid #ffd93d;
+        }
+
+        .trainer-message.success {
+            border-left: 4px solid #6bcf7f;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: #1a1a2e;
+            padding: 0;
+            border-radius: 12px;
+            width: 80%;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #333;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #fff;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close:hover {
+            color: #fff;
+        }
+
+        .modal-body {
+            padding: 20px;
+            color: #ddd;
+            line-height: 1.6;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #333;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .modal-btn {
+            background-color: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .modal-btn:hover {
+            background-color: #764ba2;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #333;
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 0.8s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         /* Stats Grid */
         .stats-grid {
             display: grid;
@@ -566,11 +703,38 @@
         </header>
 
         <!-- Trainer Message -->
-        <div class="trainer-message">
-            <div class="trainer-icon">🤖</div>
+        <div class="trainer-message" id="trainerMessage">
+            <div class="trainer-icon" id="trainerIcon">🤖</div>
             <div class="trainer-content">
-                <h3>Trainer Alert</h3>
-                <p>Keep up your commit streak! You're doing great. Today's goal: Push at least 1 commit. Let's build something amazing!</p>
+                <h3>Coach says...</h3>
+                <p id="trainerMessageText">Loading trainer message...</p>
+            </div>
+        </div>
+
+        <!-- AI Actions -->
+        <div style="display: flex; gap: 12px; margin-bottom: 30px; flex-wrap: wrap;">
+            <button id="aiReviewBtn" class="ai-action-btn" style="flex: 1; min-width: 200px;">
+                📊 Get AI Review
+            </button>
+            <button id="suggestTasksBtn" class="ai-action-btn" style="flex: 1; min-width: 200px;">
+                💡 Suggest Tasks
+            </button>
+        </div>
+
+        <!-- AI Review Modal -->
+        <div id="aiReviewModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Your AI Performance Review</h2>
+                    <button class="modal-close" id="closeModalBtn">&times;</button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <div class="loading-spinner"></div>
+                    <p>Analyzing your performance...</p>
+                </div>
+                <div class="modal-footer">
+                    <button id="closeModalBtn2" class="modal-btn">Close</button>
+                </div>
             </div>
         </div>
 
@@ -1069,6 +1233,128 @@
             };
             return text.replace(/[&<>"']/g, m => map[m]);
         }
+
+        /**
+         * Load and display trainer message with dynamic styling
+         */
+        async function loadTrainerMessage() {
+            try {
+                const response = await fetch('/trainer/message');
+                const data = await response.json();
+                
+                const messageEl = document.getElementById('trainerMessageText');
+                const messageDiv = document.getElementById('trainerMessage');
+                const iconEl = document.getElementById('trainerIcon');
+                
+                messageEl.textContent = data.message;
+                
+                // Remove previous style classes
+                messageDiv.classList.remove('danger', 'warning', 'success');
+                messageDiv.classList.add(data.style);
+                
+                // Update emoji based on style
+                const emojiMap = { danger: '🔥', warning: '⚠️', success: '🎉' };
+                iconEl.textContent = emojiMap[data.style] || '🤖';
+            } catch (error) {
+                console.error('Failed to load trainer message:', error);
+                document.getElementById('trainerMessageText').textContent = 'Coach is taking a break...';
+            }
+        }
+
+        /**
+         * Open AI Review modal and fetch performance analysis
+         */
+        async function openAIReview() {
+            const modal = document.getElementById('aiReviewModal');
+            const modalBody = document.getElementById('modalBody');
+            modal.classList.add('active');
+            
+            try {
+                const response = await fetch('/trainer/analyze');
+                const data = await response.json();
+                
+                modalBody.innerHTML = `
+                    <div>
+                        <h3>Performance Analysis</h3>
+                        <p>${data.analysis}</p>
+                        <hr style="border-color: #333; margin: 15px 0;">
+                        <p><strong>Total Commits:</strong> ${data.commits_total}</p>
+                        <p><strong>Active Days:</strong> ${data.active_days}</p>
+                        <p><strong>Unique Repositories:</strong> ${data.unique_repositories}</p>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Failed to get AI review:', error);
+                modalBody.innerHTML = '<p style="color: #ff6b6b;">Failed to fetch AI review. Please try again.</p>';
+            }
+        }
+
+        /**
+         * Suggest tasks and auto-add them to quests
+         */
+        async function suggestAndAddTasks() {
+            try {
+                const response = await fetch('/trainer/suggest');
+                const data = await response.json();
+                
+                let added = 0;
+                for (const suggestion of data.suggestions) {
+                    try {
+                        await fetch('/tasks', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                task: suggestion,
+                                status: 'pending'
+                            })
+                        });
+                        added++;
+                    } catch (error) {
+                        console.error('Failed to add task:', error);
+                    }
+                }
+                
+                alert(`✅ Added ${added} suggested tasks to your quests!`);
+                // Reload tasks to show new ones
+                loadTodayQuests();
+                loadTrainerMessage();
+            } catch (error) {
+                console.error('Failed to get suggestions:', error);
+                alert('❌ Failed to get task suggestions. Please try again.');
+            }
+        }
+
+        /**
+         * Set up modal controls and event listeners
+         */
+        function setupModalControls() {
+            const modal = document.getElementById('aiReviewModal');
+            const closeBtn1 = document.getElementById('closeModalBtn');
+            const closeBtn2 = document.getElementById('closeModalBtn2');
+            
+            closeBtn1.addEventListener('click', () => modal.classList.remove('active'));
+            closeBtn2.addEventListener('click', () => modal.classList.remove('active'));
+            
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        }
+
+        // Set up AI button event listeners
+        document.getElementById('aiReviewBtn').addEventListener('click', openAIReview);
+        document.getElementById('suggestTasksBtn').addEventListener('click', suggestAndAddTasks);
+
+        // Override original initDashboard to include AI initialization
+        const originalInitDashboard = initDashboard;
+        initDashboard = function() {
+            originalInitDashboard();
+            loadTrainerMessage();
+            setupModalControls();
+        };
     </script>
 </body>
 </html>

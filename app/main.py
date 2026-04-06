@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 import requests
-from typing import Optional
+from typing import Optional, List
 from collections import defaultdict
 from datetime import datetime, date, timedelta
 from sqlalchemy.orm import Session
@@ -12,6 +14,77 @@ from app.models import Commit, Task, TaskStatus
 from app.trainer import get_trainer_message
 from app.analyzer import analyze_with_groq, get_task_suggestions
 from groq import Groq
+
+# ==================== Pydantic Request/Response Models ====================
+
+class TaskCreateRequest(BaseModel):
+    """Request schema for creating a task"""
+    task: str = Field(..., min_length=1, max_length=500, description="Task description")
+    
+    class Config:
+        example = {"task": "Implement user authentication"}
+
+
+class TaskResponse(BaseModel):
+    """Response schema for task"""
+    id: int
+    task: str
+    status: str
+    date: str
+    created_at: str
+    updated_at: str
+
+
+class CommitResponse(BaseModel):
+    """Response schema for commit data"""
+    date: str
+    total_commits: int
+
+
+class StreakResponse(BaseModel):
+    """Response schema for streak data"""
+    streak_days: int
+    start_date: Optional[str]
+    end_date: Optional[str]
+    message: str
+
+
+class TrainerResponse(BaseModel):
+    """Response schema for trainer message"""
+    message: str
+    style: str  # danger, warning, success
+    intensity: str
+    commits_today: int
+
+
+class AnalysisResponse(BaseModel):
+    """Response schema for AI analysis"""
+    analysis: Optional[str]
+    commits_total: int
+    unique_repositories: int
+    active_days: int
+    available: bool
+    message: Optional[str] = None
+
+
+class SuggestionsResponse(BaseModel):
+    """Response schema for task suggestions"""
+    suggestions: Optional[List[str]]
+    available: bool
+    commits_analyzed: int
+    repos_used: int
+    message: Optional[str] = None
+
+
+class StatsResponse(BaseModel):
+    """Response schema for overall statistics"""
+    total_commits: int
+    total_tasks: int
+    completed_tasks: int
+    pending_tasks: int
+    current_streak: int
+    active_days: int
+    unique_repositories: int
 
 app = FastAPI(title="DevTrackr", version="0.1.0")
 
@@ -126,8 +199,8 @@ def _fetch_github_commits(username: Optional[str] = None) -> list:
 
 @app.get("/")
 def read_root():
-    """Hello world route"""
-    return {"message": "Welcome to DevTrackr API", "status": "running"}
+    """Serve the dashboard HTML file"""
+    return FileResponse("static/dashboard.html")
 
 
 @app.get("/health")
@@ -275,7 +348,7 @@ def sync_commits(username: Optional[str] = None, db: Session = Depends(get_db)):
         )
 
 
-@app.get("/commits/weekly")
+@app.get("/commits/weekly", response_model=List[CommitResponse])
 def get_commits_weekly(db: Session = Depends(get_db)):
     """
     Get total commits per day for the last 7 days.
@@ -284,17 +357,7 @@ def get_commits_weekly(db: Session = Depends(get_db)):
     groups them by date, and returns the total commit count per day.
     
     Returns:
-        List of daily commit summaries:
-        [
-            {
-                "date": "2024-01-15",
-                "total_commits": 12
-            },
-            {
-                "date": "2024-01-14",
-                "total_commits": 8
-            }
-        ]
+        List of daily commit summaries
     """
     try:
         # Calculate date range: last 7 days from today
@@ -315,10 +378,10 @@ def get_commits_weekly(db: Session = Depends(get_db)):
         # Convert to list format, sorted by date descending
         result = []
         for date_key in sorted(daily_totals.keys(), reverse=True):
-            result.append({
-                "date": date_key.isoformat(),
-                "total_commits": daily_totals[date_key]
-            })
+            result.append(CommitResponse(
+                date=date_key.isoformat(),
+                total_commits=daily_totals[date_key]
+            ))
         
         return result
     
@@ -329,7 +392,7 @@ def get_commits_weekly(db: Session = Depends(get_db)):
         )
 
 
-@app.get("/streak")
+@app.get("/streak", response_model=StreakResponse)
 def get_commit_streak(db: Session = Depends(get_db)):
     """
     Calculate the current commit streak.
@@ -339,25 +402,19 @@ def get_commit_streak(db: Session = Depends(get_db)):
     days with commits.
     
     Returns:
-        JSON response with streak information:
-        {
-            "streak_days": 5,
-            "start_date": "2024-01-11",
-            "end_date": "2024-01-15",
-            "message": "Current streak: 5 consecutive days with commits"
-        }
+        JSON response with streak information
     """
     try:
         # Get all unique dates with commits, sorted descending
         commits = db.query(Commit.date).distinct().order_by(Commit.date.desc()).all()
         
         if not commits:
-            return {
-                "streak_days": 0,
-                "start_date": None,
-                "end_date": None,
-                "message": "No commits found"
-            }
+            return StreakResponse(
+                streak_days=0,
+                start_date=None,
+                end_date=None,
+                message="No commits found"
+            )
         
         # Extract date objects and sort them
         commit_dates = sorted([c[0] for c in commits], reverse=True)
@@ -383,12 +440,12 @@ def get_commit_streak(db: Session = Depends(get_db)):
         most_recent_date = commit_dates[0]
         streak_start_date = most_recent_date - timedelta(days=streak_count - 1)
         
-        return {
-            "streak_days": streak_count,
-            "start_date": streak_start_date.isoformat(),
-            "end_date": most_recent_date.isoformat(),
-            "message": f"Current streak: {streak_count} consecutive days with commits"
-        }
+        return StreakResponse(
+            streak_days=streak_count,
+            start_date=streak_start_date.isoformat(),
+            end_date=most_recent_date.isoformat(),
+            message=f"Current streak: {streak_count} consecutive days with commits"
+        )
     
     except Exception as e:
         raise HTTPException(
@@ -399,36 +456,28 @@ def get_commit_streak(db: Session = Depends(get_db)):
 
 # ==================== Task Management Routes ====================
 
-@app.post("/tasks")
-def create_task(task_name: str, db: Session = Depends(get_db)):
+@app.post("/tasks", response_model=TaskResponse)
+def create_task_json(task_data: TaskCreateRequest, db: Session = Depends(get_db)):
     """
     Create a new task with today's date.
     
     Args:
-        task_name: Description of the task (up to 500 characters)
+        task_data: Request body with task description
         db: Database session (injected by FastAPI)
     
     Returns:
-        Created task with full details:
-        {
-            "id": 1,
-            "task": "Fix login bug",
-            "status": "pending",
-            "date": "2024-01-15",
-            "created_at": "2024-01-15T14:30:22.123456",
-            "updated_at": "2024-01-15T14:30:22.123456"
-        }
+        Created task with full details
     """
     try:
-        if not task_name or not task_name.strip():
+        if not task_data.task or not task_data.task.strip():
             raise HTTPException(
                 status_code=400,
-                detail="Task name cannot be empty"
+                detail="Task cannot be empty"
             )
         
         # Create new task with today's date and PENDING status
         new_task = Task(
-            task=task_name.strip(),
+            task=task_data.task.strip(),
             status=TaskStatus.PENDING,
             date=date.today()
         )
@@ -436,14 +485,14 @@ def create_task(task_name: str, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(new_task)
         
-        return {
-            "id": new_task.id,
-            "task": new_task.task,
-            "status": new_task.status.value,
-            "date": new_task.date.isoformat(),
-            "created_at": new_task.created_at.isoformat(),
-            "updated_at": new_task.updated_at.isoformat()
-        }
+        return TaskResponse(
+            id=new_task.id,
+            task=new_task.task,
+            status=new_task.status.value,
+            date=new_task.date.isoformat(),
+            created_at=new_task.created_at.isoformat(),
+            updated_at=new_task.updated_at.isoformat()
+        )
     
     except HTTPException:
         raise
@@ -455,7 +504,30 @@ def create_task(task_name: str, db: Session = Depends(get_db)):
         )
 
 
-@app.get("/tasks/today")
+@app.post("/tasks")
+def create_task_query(task_name: str, db: Session = Depends(get_db)):
+    """
+    Create a new task with today's date (legacy query param version).
+    Supports task_name as query parameter for backward compatibility.
+    
+    Args:
+        task_name: Task description via query parameter
+        db: Database session (injected by FastAPI)
+    
+    Returns:
+        Created task with full details
+    """
+    if not task_name or not task_name.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Task cannot be empty"
+        )
+    
+    req = TaskCreateRequest(task=task_name.strip())
+    return create_task_json(req, db)
+
+
+@app.get("/tasks/today", response_model=List[TaskResponse])
 def get_tasks_today(db: Session = Depends(get_db)):
     """
     Get all tasks for today.
@@ -463,25 +535,7 @@ def get_tasks_today(db: Session = Depends(get_db)):
     Retrieves all tasks created or due today from the database.
     
     Returns:
-        List of tasks for today:
-        [
-            {
-                "id": 1,
-                "task": "Fix login bug",
-                "status": "pending",
-                "date": "2024-01-15",
-                "created_at": "2024-01-15T14:30:22.123456",
-                "updated_at": "2024-01-15T14:30:22.123456"
-            },
-            {
-                "id": 2,
-                "task": "Write unit tests",
-                "status": "in_progress",
-                "date": "2024-01-15",
-                "created_at": "2024-01-15T14:32:15.654321",
-                "updated_at": "2024-01-15T14:35:00.000000"
-            }
-        ]
+        List of tasks for today
     """
     try:
         today = date.today()
@@ -489,18 +543,17 @@ def get_tasks_today(db: Session = Depends(get_db)):
         # Query all tasks for today, sorted by created_at descending
         tasks = db.query(Task).filter(Task.date == today).order_by(Task.created_at.desc()).all()
         
-        result = []
-        for task in tasks:
-            result.append({
-                "id": task.id,
-                "task": task.task,
-                "status": task.status.value,
-                "date": task.date.isoformat(),
-                "created_at": task.created_at.isoformat(),
-                "updated_at": task.updated_at.isoformat()
-            })
-        
-        return result
+        return [
+            TaskResponse(
+                id=task.id,
+                task=task.task,
+                status=task.status.value,
+                date=task.date.isoformat(),
+                created_at=task.created_at.isoformat(),
+                updated_at=task.updated_at.isoformat()
+            )
+            for task in tasks
+        ]
     
     except Exception as e:
         raise HTTPException(
@@ -509,7 +562,7 @@ def get_tasks_today(db: Session = Depends(get_db)):
         )
 
 
-@app.patch("/tasks/{task_id}/done")
+@app.patch("/tasks/{task_id}/done", response_model=TaskResponse)
 def mark_task_done(task_id: int, db: Session = Depends(get_db)):
     """
     Mark a task as completed.
@@ -521,15 +574,7 @@ def mark_task_done(task_id: int, db: Session = Depends(get_db)):
         db: Database session (injected by FastAPI)
     
     Returns:
-        Updated task:
-        {
-            "id": 1,
-            "task": "Fix login bug",
-            "status": "completed",
-            "date": "2024-01-15",
-            "created_at": "2024-01-15T14:30:22.123456",
-            "updated_at": "2024-01-15T14:35:45.654321"
-        }
+        Updated task
     """
     try:
         # Query for the task
@@ -547,14 +592,14 @@ def mark_task_done(task_id: int, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(task)
         
-        return {
-            "id": task.id,
-            "task": task.task,
-            "status": task.status.value,
-            "date": task.date.isoformat(),
-            "created_at": task.created_at.isoformat(),
-            "updated_at": task.updated_at.isoformat()
-        }
+        return TaskResponse(
+            id=task.id,
+            task=task.task,
+            status=task.status.value,
+            date=task.date.isoformat(),
+            created_at=task.created_at.isoformat(),
+            updated_at=task.updated_at.isoformat()
+        )
     
     except HTTPException:
         raise
@@ -618,7 +663,7 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
         )
 
 
-@app.get("/trainer/message")
+@app.get("/trainer/message", response_model=TrainerResponse)
 def get_trainer_motivation(db: Session = Depends(get_db)):
     """
     Get a gym coach-style motivation message based on today's commits.
@@ -630,13 +675,7 @@ def get_trainer_motivation(db: Session = Depends(get_db)):
     - 5+ commits: Celebration
     
     Returns:
-        JSON response with trainer message:
-        {
-            "message": "YOOO! You're DEAD, buddy! ZERO commits?!...",
-            "style": "danger",
-            "intensity": "MAXIMUM WARNING",
-            "commits_today": 0
-        }
+        JSON response with trainer message
     """
     try:
         # Get today's date
@@ -651,12 +690,14 @@ def get_trainer_motivation(db: Session = Depends(get_db)):
         total_commits = sum(commit.count for commit in today_commits)
         
         # Get the trainer message
-        trainer_response = get_trainer_message(total_commits)
+        trainer_data = get_trainer_message(total_commits)
         
-        # Add the commit count to response
-        trainer_response["commits_today"] = total_commits
-        
-        return trainer_response
+        return TrainerResponse(
+            message=trainer_data["message"],
+            style=trainer_data["style"],
+            intensity=trainer_data["intensity"],
+            commits_today=total_commits
+        )
     
     except Exception as e:
         raise HTTPException(
@@ -665,8 +706,8 @@ def get_trainer_motivation(db: Session = Depends(get_db)):
         )
 
 
-@app.get("/trainer/analyze")
-async def analyze_performance(db: Session = Depends(get_db)):
+@app.get("/trainer/analyze", response_model=AnalysisResponse)
+def analyze_performance(db: Session = Depends(get_db)):
     """
     Get AI-powered performance analysis for the last 7 days of commits.
     
@@ -675,33 +716,14 @@ async def analyze_performance(db: Session = Depends(get_db)):
     to be configured in your .env file.
     
     Returns:
-        JSON response with AI analysis:
-        {
-            "analysis": "You absolute beast! 15 commits this week...",
-            "commits_total": 15,
-            "unique_repositories": 3,
-            "active_days": 5,
-            "available": true
-        }
-        
-        If Groq API key is not configured:
-        {
-            "analysis": null,
-            "message": "Groq API key not configured. Add GROQ_API_KEY to your .env file.",
-            "available": false
-        }
+        JSON response with AI analysis and statistics
     """
     try:
-        # Check if Groq API key is available
-        if not GROQ_API_KEY:
-            print("[Route] Groq API key not configured")
-            return {
-                "analysis": None,
-                "message": "Groq API key not configured. Add GROQ_API_KEY to your .env file.",
-                "available": False
-            }
-        
-        print("[Route] Groq API key found, proceeding with analysis")
+        # Initialize response with defaults
+        total_commits = 0
+        unique_repos = 0
+        active_days = 0
+        analysis = None
         
         # Get the last 7 days
         today = date.today()
@@ -713,91 +735,64 @@ async def analyze_performance(db: Session = Depends(get_db)):
             Commit.date <= today
         ).all()
         
-        print(f"[Route] Found {len(commits)} commits in last 7 days")
+        if commits:
+            # Calculate summary stats
+            total_commits = sum(c.count for c in commits)
+            unique_repos = len(set(c.repo for c in commits))
+            active_days = len(set(c.date for c in commits))
+            
+            # Only attempt AI analysis if we have commits and Groq key
+            if GROQ_API_KEY:
+                # Convert to JSON-serializable format for analyzer
+                commits_data = [
+                    {
+                        "date": str(c.date),
+                        "repo": c.repo,
+                        "count": c.count
+                    }
+                    for c in commits
+                ]
+                
+                try:
+                    groq_client = Groq(api_key=GROQ_API_KEY)
+                    analysis = analyze_with_groq(commits_data, groq_client)
+                except Exception as groq_error:
+                    print(f"[Analyzer] Groq error: {type(groq_error).__name__}: {groq_error}")
+                    analysis = "AI analysis temporarily unavailable"
+            else:
+                analysis = "Groq API key not configured"
+        else:
+            analysis = "No commits found in the last 7 days"
         
-        # Convert to JSON-serializable format for analyzer
-        commits_data = [
-            {
-                "date": str(c.date),
-                "repo": c.repo,
-                "count": c.count
-            }
-            for c in commits
-        ]
-        
-        # Calculate summary stats
-        total_commits = sum(c.count for c in commits)
-        unique_repos = len(set(c.repo for c in commits))
-        active_days = len(set(c.date for c in commits))
-        
-        print(f"[Route] Initializing Groq client...")
-        # Initialize Groq client
-        groq_client = Groq(api_key=GROQ_API_KEY)
-        print(f"[Route] Groq client created, calling analyzer...")
-        
-        # Get AI analysis (not async, synchronous call)
-        analysis = analyze_with_groq(commits_data, groq_client)
-        print(f"[Route] Analysis result: {type(analysis)} - {bool(analysis)}")
-        
-        return {
-            "analysis": analysis,
-            "commits_total": total_commits,
-            "unique_repositories": unique_repos,
-            "active_days": active_days,
-            "available": True
-        }
+        return AnalysisResponse(
+            analysis=analysis if analysis else "No commits found",
+            commits_total=total_commits,
+            unique_repositories=unique_repos,
+            active_days=active_days,
+            available=bool(analysis and analysis != "Groq API key not configured"),
+            message=None if GROQ_API_KEY else "Groq API key not configured"
+        )
     
     except Exception as e:
-        print(f"[Route] Error: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"[Analyzer] Error: {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Error analyzing performance: {str(e)}"
         )
 
 
-@app.get("/trainer/suggest")
+@app.get("/trainer/suggest", response_model=SuggestionsResponse)
 def suggest_tasks(db: Session = Depends(get_db)):
     """
     Get AI-powered task suggestions for tomorrow based on recent commit activity.
     
     Uses Groq's LLM to suggest exactly 3 specific, actionable coding tasks
-    the developer should work on tomorrow based on their recent commit history
-    and repositories.
+    the developer should work on tomorrow based on their recent commit history.
     
     Returns:
-        JSON response with task suggestions:
-        {
-            "suggestions": [
-                "Add error handling to user authentication flow",
-                "Refactor database queries to reduce N+1 problems",
-                "Write unit tests for payment processing module"
-            ],
-            "available": true,
-            "commits_analyzed": 6,
-            "repos_used": 2
-        }
-        
-        If Groq API key is not configured:
-        {
-            "suggestions": null,
-            "message": "Groq API key not configured",
-            "available": false
-        }
+        JSON response with task suggestions
     """
     try:
-        # Check if Groq API key is available
-        if not GROQ_API_KEY:
-            print("[TaskSuggest] Groq API key not configured")
-            return {
-                "suggestions": None,
-                "message": "Groq API key not configured. Add GROQ_API_KEY to your .env file.",
-                "available": False
-            }
-        
-        print("[TaskSuggest] Starting task suggestion generation")
-        
         # Get the last 30 days of commit data to provide context
         today = date.today()
         thirty_days_ago = today - timedelta(days=30)
@@ -808,54 +803,153 @@ def suggest_tasks(db: Session = Depends(get_db)):
             Commit.date <= today
         ).all()
         
-        print(f"[TaskSuggest] Found {len(commits)} commits in last 30 days")
-        
-        # Convert to JSON-serializable format for analyzer
-        commits_data = [
-            {
-                "date": str(c.date),
-                "repo": c.repo,
-                "count": c.count
-            }
-            for c in commits
-        ]
+        commits_analyzed = len(commits)
         
         # Get unique repository names
-        unique_repos = sorted(set(c.repo for c in commits))
+        unique_repos = sorted(set(c.repo for c in commits)) if commits else []
+        repos_used = len(unique_repos)
         
-        print(f"[TaskSuggest] Working with {len(unique_repos)} unique repos: {unique_repos}")
+        # Provide default suggestions if no commits or no Groq key
+        suggestions = None
+        message = None
         
-        # Initialize Groq client
-        groq_client = Groq(api_key=GROQ_API_KEY)
-        print(f"[TaskSuggest] Groq client created, requesting suggestions...")
-        
-        # Get task suggestions from Groq
-        suggestions = get_task_suggestions(commits_data, unique_repos, groq_client)
-        
-        if not suggestions:
-            print("[TaskSuggest] Failed to get suggestions from Groq")
+        if not GROQ_API_KEY:
+            message = "Groq API key not configured"
             suggestions = [
                 "Review and refactor recent code changes",
                 "Add more comprehensive unit tests",
                 "Optimize database queries for performance"
             ]
+        elif commits:
+            # Convert to JSON-serializable format for analyzer
+            commits_data = [
+                {
+                    "date": str(c.date),
+                    "repo": c.repo,
+                    "count": c.count
+                }
+                for c in commits
+            ]
+            
+            try:
+                groq_client = Groq(api_key=GROQ_API_KEY)
+                suggestions = get_task_suggestions(commits_data, unique_repos, groq_client)
+                
+                if not suggestions:
+                    suggestions = [
+                        "Review and refactor recent code changes",
+                        "Add more comprehensive unit tests",
+                        "Optimize database queries for performance"
+                    ]
+            except Exception as groq_error:
+                print(f"[TaskSuggest] Groq error: {type(groq_error).__name__}: {groq_error}")
+                suggestions = [
+                    "Review and refactor recent code changes",
+                    "Add more comprehensive unit tests",
+                    "Optimize database queries for performance"
+                ]
+        else:
+            message = "No commits found in recent history"
+            suggestions = [
+                "Start a new feature or bug fix",
+                "Improve code documentation",
+                "Set up development environment"
+            ]
         
-        print(f"[TaskSuggest] Generated {len(suggestions)} suggestions")
-        
-        return {
-            "suggestions": suggestions,
-            "available": True,
-            "commits_analyzed": len(commits),
-            "repos_used": len(unique_repos)
-        }
+        return SuggestionsResponse(
+            suggestions=suggestions,
+            available=bool(GROQ_API_KEY and commits),
+            commits_analyzed=commits_analyzed,
+            repos_used=repos_used,
+            message=message
+        )
     
     except Exception as e:
         print(f"[TaskSuggest] Error: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Error generating task suggestions: {str(e)}"
+        )
+
+
+@app.get("/stats", response_model=StatsResponse)
+def get_stats(db: Session = Depends(get_db)):
+    """
+    Get overall statistics about commits and tasks.
+    
+    Returns a comprehensive summary of all activity:
+    - Total commits from all time
+    - Task statistics (pending, completed, in progress)
+    - Current streak
+    - Unique repositories
+    - Active days
+    
+    Returns:
+        JSON response with aggregated statistics
+    """
+    try:
+        # Get all commits
+        all_commits = db.query(Commit).all()
+        total_commits = sum(c.count for c in all_commits)
+        unique_repos = len(set(c.repo for c in all_commits)) if all_commits else 0
+        active_days = len(set(c.date for c in all_commits)) if all_commits else 0
+        
+        # Get task statistics
+        total_tasks = db.query(Task).count()
+        completed_tasks = db.query(Task).filter(Task.status == TaskStatus.COMPLETED).count()
+        pending_tasks = db.query(Task).filter(Task.status == TaskStatus.PENDING).count()
+        
+        # Get current streak
+        streak_response = get_commit_streak(db)
+        current_streak = streak_response.get("streak_days", 0)
+        
+        return StatsResponse(
+            total_commits=total_commits,
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            pending_tasks=pending_tasks,
+            current_streak=current_streak,
+            active_days=active_days,
+            unique_repositories=unique_repos
+        )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching statistics: {str(e)}"
+        )
+
+
+@app.get("/tasks", response_model=List[TaskResponse])
+def get_all_tasks(db: Session = Depends(get_db)):
+    """
+    Get all tasks (optionally filter by status).
+    
+    Query Parameters:
+        - status: Filter by status (pending, in_progress, completed, cancelled)
+    
+    Returns:
+        List of all tasks
+    """
+    try:
+        tasks = db.query(Task).order_by(Task.created_at.desc()).all()
+        
+        return [
+            TaskResponse(
+                id=task.id,
+                task=task.task,
+                status=task.status.value,
+                date=task.date.isoformat(),
+                created_at=task.created_at.isoformat(),
+                updated_at=task.updated_at.isoformat()
+            )
+            for task in tasks
+        ]
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching tasks: {str(e)}"
         )
 
 
