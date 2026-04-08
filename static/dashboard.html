@@ -831,26 +831,39 @@
     </div>
 
     <script>
-        // API Configuration - Set the backend base URL
-        // In development: http://localhost:8000
-        // In production: Use REACT_APP_API_URL environment variable or default to Render URL
+        // ============================================================================
+        // API Configuration - Automatic Environment Detection
+        // ============================================================================
+        // This dynamically switches between local and production API endpoints
+        // based on the current hostname
+        
         const API_BASE_URL = (function() {
-            // Check if set via window config (for Vercel environment variables)
-            if (window.API_BASE_URL) {
-                return window.API_BASE_URL;
+            const hostname = window.location.hostname;
+            
+            // Development environments
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                // Local development - use local backend
+                return 'http://127.0.0.1:8000';
             }
-            // Check if in development (localhost)
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                return 'http://localhost:8000';
+            
+            // Production environments
+            if (hostname.includes('vercel.app')) {
+                // Vercel frontend - use Render backend
+                return 'https://devtrackr.onrender.com';
             }
-            // Default to empty string (same domain) - will be overridden by Vercel env var
-            return '';
+            
+            // Fallback for other environments
+            // Assumes backend is on same domain
+            return `${window.location.protocol}//${window.location.hostname}:8000`;
         })();
 
         // Function to build API URLs
         function getApiUrl(endpoint) {
             return API_BASE_URL + endpoint;
         }
+
+        // Log API configuration (for debugging)
+        console.log(`🔗 API Configuration: ${API_BASE_URL}`);
 
         // Chart.js configuration for dark theme
         const chartConfig = {

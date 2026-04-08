@@ -88,13 +88,29 @@ class StatsResponse(BaseModel):
 
 app = FastAPI(title="DevTrackr", version="0.1.0")
 
-# Enable CORS for all origins (for development)
+# ============================================================================
+# CORS Configuration
+# ============================================================================
+# Allow requests from specific origins for security
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        # Local development
+        "http://localhost:3000",
+        "http://localhost:5500",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5500",
+        "http://127.0.0.1:8000",
+        
+        # Production - Vercel frontend
+        "https://devtrackr.vercel.app",
+        
+        # Allow all Vercel preview URLs
+        "https://*.vercel.app",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PATCH, DELETE, etc.)
+    allow_headers=["*"],  # Allow all headers
 )
 
 
