@@ -27,7 +27,11 @@ Environment Variables:
     
     OPTIONAL:
         - GITHUB_API_BASE: GitHub API endpoint (default: https://api.github.com)
-        - DATABASE_URL: Database connection string (default: sqlite:///./devtrackr.db)
+        - DATABASE_URL: Database connection string
+            * Production (PostgreSQL): postgresql://user:password@host:port/database
+            * Local (SQLite): sqlite:///./devtrackr.db (default)
+            * Render (convert postgres:// to postgresql:// automatically)
+        - GROQ_API_KEY: Groq API key for AI features (optional)
 
 Files:
     - .env: Local configuration (NOT in Git, created from .env.example)
@@ -185,12 +189,21 @@ DATABASE_URL = get_optional_env(
     "sqlite:///./devtrackr.db"
 )
 
-# Convert SQLite URLs for SQLAlchemy compatibility
-# SQLite URLs need 4 slashes: sqlite:////absolute/path or sqlite:///relative/path
+# ============================================================================
+# Database URL Validation and Conversion
+# ============================================================================
+
+# Fix postgres:// to postgresql:// for SQLAlchemy 2.0+ compatibility
+# Render might return postgres://, but SQLAlchemy 2.0+ requires postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# Ensure SQLite URLs have proper format
+# SQLite URLs need 3 slashes for relative paths: sqlite:///./devtrackr.db
+# or 4 slashes for absolute paths: sqlite:////absolute/path
 if DATABASE_URL.startswith("sqlite://"):
-    # Ensure proper SQLite URL format
     if not DATABASE_URL.startswith("sqlite:////") and not DATABASE_URL.startswith("sqlite:///"):
-        DATABASE_URL = DATABASE_URL.replace("sqlite://", "sqlite:///")
+        DATABASE_URL = DATABASE_URL.replace("sqlite://", "sqlite:///", 1)
 
 # ============================================================================
 # Configuration Summary (for debugging)
@@ -199,8 +212,13 @@ if DATABASE_URL.startswith("sqlite://"):
 # To verify your configuration is loaded correctly, run:
 #   python -c "from app.config import GITHUB_USERNAME; print(GITHUB_USERNAME)"
 #
-# To check all configuration values:
+# To check all configuration values including database:
 #   python -c "from app import config; print(f'User: {config.GITHUB_USERNAME}'); print(f'API: {config.GITHUB_API_BASE}'); print(f'DB: {config.DATABASE_URL}')"
+#
+# Database Support:
+#   - SQLite (default local): sqlite:///./devtrackr.db
+#   - PostgreSQL (production): postgresql://user:password@host:port/database
+#   - Render PostgreSQL: Automatically converts postgres:// to postgresql://
 #
 # ============================================================================
 

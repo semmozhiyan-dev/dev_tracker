@@ -831,6 +831,27 @@
     </div>
 
     <script>
+        // API Configuration - Set the backend base URL
+        // In development: http://localhost:8000
+        // In production: Use REACT_APP_API_URL environment variable or default to Render URL
+        const API_BASE_URL = (function() {
+            // Check if set via window config (for Vercel environment variables)
+            if (window.API_BASE_URL) {
+                return window.API_BASE_URL;
+            }
+            // Check if in development (localhost)
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                return 'http://localhost:8000';
+            }
+            // Default to empty string (same domain) - will be overridden by Vercel env var
+            return '';
+        })();
+
+        // Function to build API URLs
+        function getApiUrl(endpoint) {
+            return API_BASE_URL + endpoint;
+        }
+
         // Chart.js configuration for dark theme
         const chartConfig = {
             primaryText: '#e6edf3',
@@ -853,7 +874,7 @@
             
             try {
                 // Fetch data from the API
-                const response = await fetch('/commits/weekly');
+                const response = await fetch(getApiUrl('/commits/weekly'));
                 
                 if (!response.ok) {
                     throw new Error(`API Error: ${response.status}`);
@@ -1012,7 +1033,7 @@
          */
         async function loadStreakData() {
             try {
-                const response = await fetch('/streak');
+                const response = await fetch(getApiUrl('/streak'));
                 if (!response.ok) throw new Error('API Error: ' + response.status);
                 
                 const data = await response.json();
@@ -1059,7 +1080,7 @@
          */
         async function loadTodayCommits() {
             try {
-                const response = await fetch('/commits/weekly');
+                const response = await fetch(getApiUrl('/commits/weekly'));
                 if (!response.ok) throw new Error('API Error: ' + response.status);
                 
                 const data = await response.json();
@@ -1107,7 +1128,7 @@
          */
         async function loadTodayQuests() {
             try {
-                const response = await fetch('/tasks/today');
+                const response = await fetch(getApiUrl('/tasks/today'));
                 if (!response.ok) throw new Error('API Error: ' + response.status);
                 
                 const tasks = await response.json();
@@ -1151,7 +1172,7 @@
          */
         async function toggleTask(taskId) {
             try {
-                const response = await fetch('/tasks/' + taskId + '/done', { method: 'PATCH' });
+                const response = await fetch(getApiUrl('/tasks/' + taskId + '/done'), { method: 'PATCH' });
                 if (!response.ok) throw new Error('API Error: ' + response.status);
                 
                 // Reload quests to reflect the change
@@ -1198,7 +1219,7 @@
                 btn.disabled = true;
                 btn.textContent = 'Adding...';
                 
-                const response = await fetch('/tasks?task_name=' + encodeURIComponent(taskName), {
+                const response = await fetch(getApiUrl('/tasks?task_name=' + encodeURIComponent(taskName)), {
                     method: 'POST'
                 });
                 
@@ -1239,7 +1260,7 @@
          */
         async function loadTrainerMessage() {
             try {
-                const response = await fetch('/trainer/message');
+                const response = await fetch(getApiUrl('/trainer/message'));
                 const data = await response.json();
                 
                 const messageEl = document.getElementById('trainerMessageText');
@@ -1270,7 +1291,7 @@
             modal.classList.add('active');
             
             try {
-                const response = await fetch('/trainer/analyze');
+                const response = await fetch(getApiUrl('/trainer/analyze'));
                 const data = await response.json();
                 
                 modalBody.innerHTML = `
@@ -1294,13 +1315,13 @@
          */
         async function suggestAndAddTasks() {
             try {
-                const response = await fetch('/trainer/suggest');
+                const response = await fetch(getApiUrl('/trainer/suggest'));
                 const data = await response.json();
                 
                 let added = 0;
                 for (const suggestion of data.suggestions) {
                     try {
-                        await fetch('/tasks', {
+                        await fetch(getApiUrl('/tasks'), {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
