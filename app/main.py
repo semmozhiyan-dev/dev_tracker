@@ -98,14 +98,18 @@ app.add_middleware(
         # Local development
         "http://localhost:3000",
         "http://localhost:5500",
+        "http://localhost:8000",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5500",
         "http://127.0.0.1:8000",
         
-        # Production - Vercel frontend
-        "https://devtrackr.vercel.app",
+        # Production - Render backend (for local testing)
+        "https://dev-tracker-10ms.onrender.com",
         
-        # Allow all Vercel preview URLs
+        # Production - Vercel frontend (specific URL)
+        "https://dev-tracker-txee.vercel.app",
+        
+        # Allow all Vercel preview URLs for preview deployments
         "https://*.vercel.app",
     ],
     allow_credentials=True,

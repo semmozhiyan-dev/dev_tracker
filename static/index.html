@@ -85,6 +85,55 @@
             color: var(--accent);
         }
 
+        /* Connection Status Indicator */
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .connection-status.connected {
+            color: var(--success);
+            border-color: var(--success);
+            background-color: rgba(63, 185, 80, 0.1);
+        }
+
+        .connection-status.connected .status-dot {
+            background-color: var(--success);
+            box-shadow: 0 0 8px rgba(63, 185, 80, 0.6);
+        }
+
+        .connection-status.disconnected {
+            color: var(--danger);
+            border-color: var(--danger);
+            background-color: rgba(248, 81, 73, 0.1);
+        }
+
+        .connection-status.disconnected .status-dot {
+            background-color: var(--danger);
+            box-shadow: 0 0 8px rgba(248, 81, 73, 0.6);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
         .github-badge {
             width: 24px;
             height: 24px;
@@ -696,10 +745,16 @@
                 <h1>DevTrackr</h1>
                 <p>Your GitHub commit tracking dashboard</p>
             </div>
-            <a href="https://github.com/semmozhiyan-dev" class="github-username" target="_blank">
-                <div class="github-badge">@</div>
-                <span>semmozhiyan-dev</span>
-            </a>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <div id="connectionStatus" class="connection-status disconnected" title="Backend connection status">
+                    <span class="status-dot"></span>
+                    <span id="connectionText">Connecting...</span>
+                </div>
+                <a href="https://github.com/semmozhiyan-dev" class="github-username" target="_blank">
+                    <div class="github-badge">@</div>
+                    <span>semmozhiyan-dev</span>
+                </a>
+            </div>
         </header>
 
         <!-- Trainer Message -->
@@ -867,6 +922,74 @@
         // Log API configuration (for debugging)
         console.log(`🔗 API Base URL: ${API_BASE_URL}`);
 
+        /**
+         * Enhanced fetch wrapper with better error handling
+         */
+        async function fetchAPI(endpoint, options = {}) {
+            try {
+                const url = getApiUrl(endpoint);
+                console.log(`📡 Fetching: ${url}`);
+                
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                if (!response.ok) {
+                    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        if (errorData.detail) {
+                            errorMessage = errorData.detail;
+                        } else if (errorData.message) {
+                            errorMessage = errorData.message;
+                        }
+                    } catch (e) {
+                        // Unable to parse error response
+                    }
+                    throw new Error(errorMessage);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error(`❌ API Error at ${endpoint}:`, error);
+                throw error;
+            }
+        }
+
+        /**
+         * Test connection to backend and update status indicator
+         */
+        async function checkBackendConnection() {
+            const statusIndicator = document.getElementById('connectionStatus');
+            const statusText = document.getElementById('connectionText');
+            
+            try {
+                const response = await fetch(getApiUrl('/health'), { 
+                    signal: AbortSignal.timeout(5000) // 5 second timeout
+                });
+                
+                if (response.ok) {
+                    statusIndicator.classList.remove('disconnected');
+                    statusIndicator.classList.add('connected');
+                    statusText.textContent = 'Connected';
+                    console.log('✅ Backend is healthy');
+                    return true;
+                } else {
+                    throw new Error(`Health check failed: ${response.status}`);
+                }
+            } catch (error) {
+                statusIndicator.classList.remove('connected');
+                statusIndicator.classList.add('disconnected');
+                statusText.textContent = `Disconnected: ${error.message}`;
+                console.error('❌ Backend connection failed:', error);
+                return false;
+            }
+        }
+
         // Chart.js configuration for dark theme
         const chartConfig = {
             primaryText: '#e6edf3',
@@ -889,13 +1012,7 @@
             
             try {
                 // Fetch data from the API
-                const response = await fetch(getApiUrl('/commits/weekly'));
-                
-                if (!response.ok) {
-                    throw new Error(`API Error: ${response.status}`);
-                }
-                
-                const data = await response.json();
+                const data = await fetchAPI('/commits/weekly');
                 
                 // Check if data is empty
                 if (!Array.isArray(data) || data.length === 0) {
@@ -994,7 +1111,7 @@
                 
             } catch (error) {
                 console.error('Error loading chart data:', error);
-                showErrorState(container, error.message);
+                showErrorState(container, error.message || 'Failed to load chart data');
             }
         }
 
@@ -1048,10 +1165,7 @@
          */
         async function loadStreakData() {
             try {
-                const response = await fetch(getApiUrl('/streak'));
-                if (!response.ok) throw new Error('API Error: ' + response.status);
-                
-                const data = await response.json();
+                const data = await fetchAPI('/streak');
                 const streakDays = data.streak_days || 0;
                 
                 // Get card elements
@@ -1086,7 +1200,7 @@
             } catch (error) {
                 console.error('Error loading streak data:', error);
                 document.getElementById('streakValue').textContent = '0';
-                document.getElementById('streakTrend').textContent = 'Error loading data';
+                document.getElementById('streakTrend').textContent = `Error: ${error.message}`;
             }
         }
 
@@ -1095,10 +1209,7 @@
          */
         async function loadTodayCommits() {
             try {
-                const response = await fetch(getApiUrl('/commits/weekly'));
-                if (!response.ok) throw new Error('API Error: ' + response.status);
-                
-                const data = await response.json();
+                const data = await fetchAPI('/commits/weekly');
                 
                 // Get today's date
                 const today = new Date().toISOString().split('T')[0];
@@ -1123,14 +1234,18 @@
             } catch (error) {
                 console.error('Error loading today commits:', error);
                 document.getElementById('todayCommitsValue').textContent = '0';
-                document.getElementById('todayCommitsTrend').textContent = 'Error loading data';
+                document.getElementById('todayCommitsTrend').textContent = `Error: ${error.message}`;
             }
         }
 
         /**
          * Initialize all data loading on page ready
          */
-        function initDashboard() {
+        async function initDashboard() {
+            // Check backend connection first
+            await checkBackendConnection();
+            
+            // Load all data
             loadStreakData();
             loadTodayCommits();
             loadWeeklyCommitsChart();
@@ -1143,16 +1258,13 @@
          */
         async function loadTodayQuests() {
             try {
-                const response = await fetch(getApiUrl('/tasks/today'));
-                if (!response.ok) throw new Error('API Error: ' + response.status);
-                
-                const tasks = await response.json();
+                const tasks = await fetchAPI('/tasks/today');
                 renderQuests(tasks);
                 
             } catch (error) {
                 console.error('Error loading quests:', error);
                 document.getElementById('questsList').innerHTML = 
-                    '<div class="empty-quests"><div class="empty-quests-icon">⚠️</div><p>Error loading quests</p></div>';
+                    `<div class="empty-quests"><div class="empty-quests-icon">⚠️</div><p>Error loading quests</p><p style="font-size: 12px; margin-top: 8px; color: var(--danger);">${error.message}</p></div>`;
             }
         }
 
@@ -1187,8 +1299,7 @@
          */
         async function toggleTask(taskId) {
             try {
-                const response = await fetch(getApiUrl('/tasks/' + taskId + '/done'), { method: 'PATCH' });
-                if (!response.ok) throw new Error('API Error: ' + response.status);
+                await fetchAPI('/tasks/' + taskId + '/done', { method: 'PATCH' });
                 
                 // Reload quests to reflect the change
                 loadTodayQuests();
@@ -1234,11 +1345,9 @@
                 btn.disabled = true;
                 btn.textContent = 'Adding...';
                 
-                const response = await fetch(getApiUrl('/tasks?task_name=' + encodeURIComponent(taskName)), {
+                await fetchAPI('/tasks?task_name=' + encodeURIComponent(taskName), {
                     method: 'POST'
                 });
-                
-                if (!response.ok) throw new Error('API Error: ' + response.status);
                 
                 // Clear input
                 input.value = '';
@@ -1249,7 +1358,7 @@
                 
             } catch (error) {
                 console.error('Error creating task:', error);
-                alert('Failed to create quest');
+                alert(`Failed to create quest: ${error.message}`);
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Add';
@@ -1275,8 +1384,7 @@
          */
         async function loadTrainerMessage() {
             try {
-                const response = await fetch(getApiUrl('/trainer/message'));
-                const data = await response.json();
+                const data = await fetchAPI('/trainer/message');
                 
                 const messageEl = document.getElementById('trainerMessageText');
                 const messageDiv = document.getElementById('trainerMessage');
@@ -1306,8 +1414,7 @@
             modal.classList.add('active');
             
             try {
-                const response = await fetch(getApiUrl('/trainer/analyze'));
-                const data = await response.json();
+                const data = await fetchAPI('/trainer/analyze');
                 
                 modalBody.innerHTML = `
                     <div>
@@ -1321,7 +1428,7 @@
                 `;
             } catch (error) {
                 console.error('Failed to get AI review:', error);
-                modalBody.innerHTML = '<p style="color: #ff6b6b;">Failed to fetch AI review. Please try again.</p>';
+                modalBody.innerHTML = `<p style="color: #ff6b6b;">Failed to fetch AI review: ${error.message}</p>`;
             }
         }
 
@@ -1330,8 +1437,7 @@
          */
         async function suggestAndAddTasks() {
             try {
-                const response = await fetch(getApiUrl('/trainer/suggest'));
-                const data = await response.json();
+                const data = await fetchAPI('/trainer/suggest');
                 
                 let added = 0;
                 for (const suggestion of data.suggestions) {
