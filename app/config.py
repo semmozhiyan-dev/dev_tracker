@@ -40,6 +40,7 @@ Files:
 """
 
 import os
+from typing import Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file in project root
@@ -51,7 +52,7 @@ class ConfigError(Exception):
     pass
 
 
-def get_required_env(var_name: str, description: str = None) -> str:
+def get_required_env(var_name: str, description: Optional[str] = None) -> str:
     """
     Get a required environment variable with validation.
     
@@ -92,7 +93,7 @@ def get_required_env(var_name: str, description: str = None) -> str:
     return value.strip()
 
 
-def get_optional_env(var_name: str, default: str = None) -> str:
+def get_optional_env(var_name: str, default: Optional[str] = None) -> Optional[str]:
     """
     Get an optional environment variable with a default fallback.
     
@@ -195,13 +196,13 @@ DATABASE_URL = get_optional_env(
 
 # Fix postgres:// to postgresql:// for SQLAlchemy 2.0+ compatibility
 # Render might return postgres://, but SQLAlchemy 2.0+ requires postgresql://
-if DATABASE_URL.startswith("postgres://"):
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Ensure SQLite URLs have proper format
 # SQLite URLs need 3 slashes for relative paths: sqlite:///./devtrackr.db
 # or 4 slashes for absolute paths: sqlite:////absolute/path
-if DATABASE_URL.startswith("sqlite://"):
+if DATABASE_URL and DATABASE_URL.startswith("sqlite://"):
     if not DATABASE_URL.startswith("sqlite:////") and not DATABASE_URL.startswith("sqlite:///"):
         DATABASE_URL = DATABASE_URL.replace("sqlite://", "sqlite:///", 1)
 

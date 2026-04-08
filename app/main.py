@@ -389,7 +389,9 @@ def get_commits_weekly(db: Session = Depends(get_db)):
         # Aggregate commits by date
         daily_totals = defaultdict(int)
         for commit in commits:
-            daily_totals[commit.date] += commit.count
+            count_val = commit.count if commit.count is not None else 0
+            # Type ignore: SQLAlchemy Column values are ints at runtime
+            daily_totals[commit.date] = daily_totals[commit.date] + count_val  # type: ignore
         
         # Convert to list format, sorted by date descending
         result = []
@@ -501,9 +503,9 @@ def create_task_json(task_data: TaskCreateRequest, db: Session = Depends(get_db)
         db.commit()
         db.refresh(new_task)
         
-        return TaskResponse(
-            id=new_task.id,
-            task=new_task.task,
+        return TaskResponse(  # type: ignore
+            id=new_task.id,  # type: ignore
+            task=new_task.task,  # type: ignore
             status=new_task.status.value,
             date=new_task.date.isoformat(),
             created_at=new_task.created_at.isoformat(),
@@ -560,9 +562,9 @@ def get_tasks_today(db: Session = Depends(get_db)):
         tasks = db.query(Task).filter(Task.date == today).order_by(Task.created_at.desc()).all()
         
         return [
-            TaskResponse(
-                id=task.id,
-                task=task.task,
+            TaskResponse(  # type: ignore
+                id=task.id,  # type: ignore
+                task=task.task,  # type: ignore
                 status=task.status.value,
                 date=task.date.isoformat(),
                 created_at=task.created_at.isoformat(),
@@ -603,14 +605,14 @@ def mark_task_done(task_id: int, db: Session = Depends(get_db)):
             )
         
         # Update status to COMPLETED
-        task.status = TaskStatus.COMPLETED
-        task.updated_at = datetime.utcnow()
+        setattr(task, 'status', TaskStatus.COMPLETED)
+        setattr(task, 'updated_at', datetime.utcnow())
         db.commit()
         db.refresh(task)
         
-        return TaskResponse(
-            id=task.id,
-            task=task.task,
+        return TaskResponse(  # type: ignore
+            id=task.id,  # type: ignore
+            task=task.task,  # type: ignore
             status=task.status.value,
             date=task.date.isoformat(),
             created_at=task.created_at.isoformat(),
@@ -703,16 +705,17 @@ def get_trainer_motivation(db: Session = Depends(get_db)):
         ).all()
         
         # Sum up all commits for today
-        total_commits = sum(commit.count for commit in today_commits)
+        commit_counts = [c.count for c in today_commits if c.count is not None]  # type: ignore
+        total_commits = sum(commit_counts) if commit_counts else 0  # type: ignore
         
         # Get the trainer message
-        trainer_data = get_trainer_message(total_commits)
+        trainer_data = get_trainer_message(int(total_commits))  # type: ignore
         
         return TrainerResponse(
             message=trainer_data["message"],
             style=trainer_data["style"],
             intensity=trainer_data["intensity"],
-            commits_today=total_commits
+            commits_today=int(total_commits)  # type: ignore
         )
     
     except Exception as e:
@@ -737,7 +740,7 @@ def analyze_performance(db: Session = Depends(get_db)):
     try:
         # Initialize response with defaults
         total_commits = 0
-        unique_repos = 0
+        unique_repos_list = []
         active_days = 0
         analysis = None
         
@@ -753,8 +756,9 @@ def analyze_performance(db: Session = Depends(get_db)):
         
         if commits:
             # Calculate summary stats
-            total_commits = sum(c.count for c in commits)
-            unique_repos = len(set(c.repo for c in commits))
+            commit_counts = [c.count for c in commits if c.count is not None]  # type: ignore
+            total_commits = sum(commit_counts) if commit_counts else 0  # type: ignore
+            unique_repos_list = sorted([str(r) for r in set(c.repo for c in commits)])  # type: ignore
             active_days = len(set(c.date for c in commits))
             
             # Only attempt AI analysis if we have commits and Groq key
@@ -763,8 +767,8 @@ def analyze_performance(db: Session = Depends(get_db)):
                 commits_data = [
                     {
                         "date": str(c.date),
-                        "repo": c.repo,
-                        "count": c.count
+                        "repo": str(c.repo),
+                        "count": c.count if c.count is not None else 0
                     }
                     for c in commits
                 ]
@@ -782,8 +786,8 @@ def analyze_performance(db: Session = Depends(get_db)):
         
         return AnalysisResponse(
             analysis=analysis if analysis else "No commits found",
-            commits_total=total_commits,
-            unique_repositories=unique_repos,
+            commits_total=int(total_commits),  # type: ignore
+            unique_repositories=len(unique_repos_list),
             active_days=active_days,
             available=bool(analysis and analysis != "Groq API key not configured"),
             message=None if GROQ_API_KEY else "Groq API key not configured"
@@ -849,7 +853,7 @@ def suggest_tasks(db: Session = Depends(get_db)):
             
             try:
                 groq_client = Groq(api_key=GROQ_API_KEY)
-                suggestions = get_task_suggestions(commits_data, unique_repos, groq_client)
+                suggestions = get_task_suggestions(commits_data, sorted([str(r) for r in set(c.repo for c in commits)]), groq_client)
                 
                 if not suggestions:
                     suggestions = [
@@ -865,6 +869,7 @@ def suggest_tasks(db: Session = Depends(get_db)):
                     "Optimize database queries for performance"
                 ]
         else:
+            unique_repos_list = []
             message = "No commits found in recent history"
             suggestions = [
                 "Start a new feature or bug fix",
@@ -917,10 +922,10 @@ def get_stats(db: Session = Depends(get_db)):
         
         # Get current streak
         streak_response = get_commit_streak(db)
-        current_streak = streak_response.get("streak_days", 0)
+        current_streak = streak_response.streak_days
         
         return StatsResponse(
-            total_commits=total_commits,
+            total_commits=int(total_commits),  # type: ignore
             total_tasks=total_tasks,
             completed_tasks=completed_tasks,
             pending_tasks=pending_tasks,
@@ -951,9 +956,9 @@ def get_all_tasks(db: Session = Depends(get_db)):
         tasks = db.query(Task).order_by(Task.created_at.desc()).all()
         
         return [
-            TaskResponse(
-                id=task.id,
-                task=task.task,
+            TaskResponse(  # type: ignore
+                id=task.id,  # type: ignore
+                task=task.task,  # type: ignore
                 status=task.status.value,
                 date=task.date.isoformat(),
                 created_at=task.created_at.isoformat(),
