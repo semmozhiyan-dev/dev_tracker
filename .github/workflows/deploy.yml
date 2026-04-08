@@ -1,0 +1,68 @@
+name: Deploy to Render
+
+on:
+  workflow_run:
+    workflows:
+      - CI Pipeline
+    types:
+      - completed
+    branches:
+      - main
+
+concurrency:
+  group: deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    name: Deploy to Render
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trigger Render deployment
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          echo "Triggering deployment on Render..."
+          
+          RESPONSE=$(curl -X POST \
+            --silent \
+            --show-error \
+            --write-out "%{http_code}" \
+            --output /tmp/render_response.txt \
+            "$RENDER_DEPLOY_HOOK")
+          
+          echo "Response code: $RESPONSE"
+          echo "Response body:"
+          cat /tmp/render_response.txt
+          
+          if [[ "$RESPONSE" =~ ^2[0-9]{2}$ ]]; then
+            echo "Deployment triggered successfully"
+          else
+            echo "Failed to trigger deployment (HTTP $RESPONSE)"
+            exit 1
+          fi
+
+      - name: Log deployment details
+        run: |
+          echo "Deployment Details:"
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
+
+      - name: Deployment success
+        if: success()
+        run: |
+          echo "Deployment to Render completed successfully!"
+          echo "Check Render dashboard for deployment status"
+
+      - name: Deployment failure
+        if: failure()
+        run: |
+          echo "Deployment to Render failed"
+          exit 1

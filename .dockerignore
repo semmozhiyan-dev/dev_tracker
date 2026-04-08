@@ -1,0 +1,81 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Python artifacts
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test files
+tests/
+test_*.py
+*_test.py
+pytest.ini
+
+# Documentation
+*.md
+docs/
+README.md
+SETUP.md
+
+# Development tools
+docker-compose.yml
+docker-compose.local.yml
+Makefile
+
+# Temporary files
+*.log
+*.tmp
+.tmp/
+temp/
+
+# OS files
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Database files (optional - adjust based on your needs)
+*.db
+*.sqlite
+*.sqlite3
+
+# Node modules (if any)
+node_modules/
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Miscellaneous
+*.bak
+.env.example

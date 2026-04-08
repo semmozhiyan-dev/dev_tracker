@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  devtrackr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: devtrackr-app
+    ports:
+      - "8000:8000"
+    
+    # Load environment variables from .env file
+    env_file:
+      - .env
+    
+    # Environment variables specific to Docker (override or supplement .env)
+    environment:
+      - DATABASE_URL=sqlite:///./data/devtrackr.db
+      - PYTHONUNBUFFERED=1
+    
+    # Mount volumes for persistent data
+    volumes:
+      # Mount data directory for SQLite database persistence
+      - devtrackr-data:/app/data
+      
+      # Optional: Mount static files for hot-reload in development
+      # Uncomment the following line if you want to edit frontend files without rebuilding
+      # - ./static:/app/static
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    
+    # Restart policy for production
+    restart: unless-stopped
+    
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+# Named volume for database persistence
+volumes:
+  devtrackr-data:
+    driver: local
+
+# Optional: Network configuration
+networks:
+  default:
+    name: devtrackr-network
