@@ -840,21 +840,23 @@
         const API_BASE_URL = (function() {
             const hostname = window.location.hostname;
             
-            // Development environments
+            // Local Development Environment
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                // Local development - use local backend
+                // Running on local machine: use local FastAPI backend
+                console.log('🏠 Local environment detected');
                 return 'http://127.0.0.1:8000';
             }
             
-            // Production environments
-            if (hostname.includes('vercel.app')) {
-                // Vercel frontend - use Render backend
-                return 'https://devtrackr.onrender.com';
+            // Production Environment
+            if (hostname === 'dev-tracker-10ms.onrender.com') {
+                // Running on Render: use production backend
+                console.log('🚀 Production environment detected');
+                return 'https://dev-tracker-10ms.onrender.com';
             }
             
-            // Fallback for other environments
-            // Assumes backend is on same domain
-            return `${window.location.protocol}//${window.location.hostname}:8000`;
+            // Fallback for other environments (testing, staging, etc.)
+            console.log('⚙️  Unknown environment detected');
+            return `${window.location.protocol}//${window.location.hostname}`;
         })();
 
         // Function to build API URLs
@@ -863,7 +865,7 @@
         }
 
         // Log API configuration (for debugging)
-        console.log(`🔗 API Configuration: ${API_BASE_URL}`);
+        console.log(`🔗 API Base URL: ${API_BASE_URL}`);
 
         // Chart.js configuration for dark theme
         const chartConfig = {
