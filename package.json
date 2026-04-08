@@ -1,0 +1,21 @@
+{
+  "name": "dev-tracker-frontend",
+  "version": "1.0.0",
+  "description": "DevTrackr - GitHub commit tracking dashboard frontend",
+  "main": "index.js",
+  "scripts": {
+    "dev": "echo 'Open public/index.html in your browser'",
+    "build": "echo 'Static site - no build needed'"
+  },
+  "keywords": [
+    "github",
+    "tracker",
+    "commits",
+    "dashboard"
+  ],
+  "author": "Semmo Zhiyan",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

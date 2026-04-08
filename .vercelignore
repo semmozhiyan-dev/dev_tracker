@@ -1,0 +1,29 @@
+# Python files
+*.py
+app/
+venv/
+__pycache__/
+requirements.txt
+SETUP.md
+
+# Git files
+.git
+.gitignore
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Static files (served from public/ instead)
+static/
+
+# Test files
+tests/
+test_*.py
