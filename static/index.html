@@ -818,25 +818,25 @@
             </div>
 
             <!-- Total Repos -->
-            <div class="stat-card info">
+            <div class="stat-card info" id="reposCard">
                 <div class="stat-card-header">
                     <span class="stat-label">Total Repos</span>
                     <div class="stat-icon">📦</div>
                 </div>
-                <div class="stat-value">18</div>
+                <div class="stat-value" id="reposValue">--</div>
                 <p class="stat-description">Active repositories</p>
-                <div class="stat-trend">↑ 3 this month</div>
+                <div class="stat-trend" id="reposTrend">Loading...</div>
             </div>
 
             <!-- Weekly Total -->
-            <div class="stat-card info">
+            <div class="stat-card info" id="weeklyCard">
                 <div class="stat-card-header">
                     <span class="stat-label">Weekly Total</span>
                     <div class="stat-icon">📊</div>
                 </div>
-                <div class="stat-value">42</div>
+                <div class="stat-value" id="weeklyValue">--</div>
                 <p class="stat-description">Commits this week</p>
-                <div class="stat-trend">↑ 15% vs last week</div>
+                <div class="stat-trend" id="weeklyTrend">Loading...</div>
             </div>
         </div>
 
@@ -1239,6 +1239,56 @@
         }
 
         /**
+         * Load and update overall statistics
+         */
+        async function loadStats() {
+            try {
+                const data = await fetchAPI('/stats');
+                
+                // Update Total Repos
+                const reposValue = document.getElementById('reposValue');
+                const reposTrend = document.getElementById('reposTrend');
+                reposValue.textContent = data.unique_repositories || '0';
+                reposTrend.textContent = `${data.active_days || 0} active days`;
+                
+                // Update Weekly Total (last 7 days from commits/weekly endpoint)
+                try {
+                    const weeklyData = await fetchAPI('/commits/weekly');
+                    const last7Days = weeklyData.slice(-7); // get last 7 days
+                    const weeklyTotal = last7Days.reduce((sum, day) => sum + day.total_commits, 0);
+                    
+                    const weeklyValue = document.getElementById('weeklyValue');
+                    const weeklyTrend = document.getElementById('weeklyTrend');
+                    weeklyValue.textContent = weeklyTotal;
+                    
+                    // Calculate trend (compare to previous 7 days)
+                    if (weeklyData.length > 14) {
+                        const prev7Days = weeklyData.slice(-14, -7);
+                        const prevWeeklyTotal = prev7Days.reduce((sum, day) => sum + day.total_commits, 0);
+                        const trend = prevWeeklyTotal > 0 
+                            ? Math.round(((weeklyTotal - prevWeeklyTotal) / prevWeeklyTotal) * 100)
+                            : 0;
+                        const trendText = trend > 0 ? `↑ ${trend}%` : trend < 0 ? `↓ ${Math.abs(trend)}%` : '→ Same';
+                        weeklyTrend.textContent = trendText + ' vs last week';
+                    } else {
+                        weeklyTrend.textContent = `${weeklyTotal} commits this week`;
+                    }
+                } catch (error) {
+                    console.warn('Could not calculate weekly stats:', error);
+                    document.getElementById('weeklyValue').textContent = data.total_commits || '0';
+                    document.getElementById('weeklyTrend').textContent = `Total: ${data.total_commits || 0} commits`;
+                }
+                
+            } catch (error) {
+                console.error('Error loading stats:', error);
+                document.getElementById('reposValue').textContent = '0';
+                document.getElementById('reposTrend').textContent = `Error: ${error.message}`;
+                document.getElementById('weeklyValue').textContent = '0';
+                document.getElementById('weeklyTrend').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        /**
          * Initialize all data loading on page ready
          */
         async function initDashboard() {
@@ -1248,6 +1298,7 @@
             // Load all data
             loadStreakData();
             loadTodayCommits();
+            loadStats();
             loadWeeklyCommitsChart();
             loadTodayQuests();
             setupQuestForm();
