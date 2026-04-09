@@ -107,7 +107,7 @@ app.add_middleware(
         "https://dev-tracker-10ms.onrender.com",
         
         # Production - Vercel frontend (specific URL)
-        "https://dev-tracker-txee.vercel.app",
+        "https://dev-tracker-k4oz-ekscygkm3-semmozhidoubles-projects.vercel.app",
         
         # Allow all Vercel preview URLs for preview deployments
         "https://*.vercel.app",
