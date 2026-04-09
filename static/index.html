@@ -768,6 +768,9 @@
 
         <!-- AI Actions -->
         <div style="display: flex; gap: 12px; margin-bottom: 30px; flex-wrap: wrap;">
+            <button id="syncBtn" class="ai-action-btn" style="flex: 1; min-width: 200px; background: linear-gradient(135deg, #3fb950 0%, #26a641 100%);">
+                🔄 Sync GitHub Data
+            </button>
             <button id="aiReviewBtn" class="ai-action-btn" style="flex: 1; min-width: 200px;">
                 📊 Get AI Review
             </button>
@@ -1537,7 +1540,51 @@
             });
         }
 
+        /**
+         * Sync GitHub commits from GitHub API to database
+         */
+        async function syncGitHub() {
+            const syncBtn = document.getElementById('syncBtn');
+            const originalText = syncBtn.textContent;
+            
+            try {
+                syncBtn.disabled = true;
+                syncBtn.textContent = '⏳ Syncing...';
+                
+                const response = await fetchAPI('/commits/sync', { method: 'POST' });
+                
+                syncBtn.textContent = '✅ Sync Complete!';
+                alert(`✅ Synced Successfully!\n\nTotal Fetched: ${response.total_fetched}\nNew Records: ${response.new_synced}\nDuplicates Skipped: ${response.duplicates_skipped}\n\n${response.message}`);
+                
+                // Reload all data to reflect the new commits
+                setTimeout(() => {
+                    loadStats();
+                    loadStreakData();
+                    loadTodayCommits();
+                    loadWeeklyCommitsChart();
+                }, 500);
+                
+                // Reset button after 2 seconds
+                setTimeout(() => {
+                    syncBtn.textContent = originalText;
+                    syncBtn.disabled = false;
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Error syncing GitHub data:', error);
+                syncBtn.textContent = '❌ Sync Failed';
+                alert(`Failed to sync: ${error.message}`);
+                
+                // Reset button after 2 seconds
+                setTimeout(() => {
+                    syncBtn.textContent = originalText;
+                    syncBtn.disabled = false;
+                }, 2000);
+            }
+        }
+
         // Set up AI button event listeners
+        document.getElementById('syncBtn').addEventListener('click', syncGitHub);
         document.getElementById('aiReviewBtn').addEventListener('click', openAIReview);
         document.getElementById('suggestTasksBtn').addEventListener('click', suggestAndAddTasks);
 
