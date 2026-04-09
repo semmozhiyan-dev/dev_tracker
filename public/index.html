@@ -1128,6 +1128,97 @@
         }
 
         /**
+         * Refresh all dashboard cards with fresh data from the API
+         */
+        async function refreshAllCards() {
+            console.log('🔄 Refreshing all dashboard cards...');
+            try {
+                // Load all data in parallel for better performance
+                await Promise.allSettled([
+                    loadStreakData(),
+                    loadTodayCommits(),
+                    loadWeeklyCommitsChart()
+                ]);
+                console.log('✅ All cards refreshed successfully');
+            } catch (error) {
+                console.error('Error during card refresh:', error);
+            }
+        }
+
+        /**
+         * Force sync GitHub data and refresh all cards
+         */
+        async function syncGitHub() {
+            const syncBtn = document.getElementById('syncBtn');
+            const originalText = syncBtn?.textContent || '🔄 Sync GitHub Data';
+            
+            try {
+                if (syncBtn) {
+                    syncBtn.disabled = true;
+                    syncBtn.textContent = '⏳ Syncing...';
+                }
+                
+                const response = await fetch(getApiUrl('/commits/sync'), { method: 'POST' });
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                
+                const data = await response.json();
+                
+                if (syncBtn) {
+                    syncBtn.textContent = '✅ Sync Complete!';
+                }
+                
+                console.log('✅ GitHub sync completed:', data);
+                alert(`✅ Synced Successfully!\n\nTotal Fetched: ${data.total_fetched}\nNew Records: ${data.new_synced}\nDuplicates Skipped: ${data.duplicates_skipped}\n\n${data.message}`);
+                
+                // Reload all data to reflect the new commits
+                setTimeout(() => {
+                    refreshAllCards();
+                }, 500);
+                
+                // Reset button after 2 seconds
+                setTimeout(() => {
+                    if (syncBtn) {
+                        syncBtn.textContent = originalText;
+                        syncBtn.disabled = false;
+                    }
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Error syncing GitHub data:', error);
+                if (syncBtn) {
+                    syncBtn.textContent = '❌ Sync Failed';
+                }
+                alert(`Failed to sync: ${error.message}`);
+                
+                // Reset button after 2 seconds
+                setTimeout(() => {
+                    if (syncBtn) {
+                        syncBtn.textContent = originalText;
+                        syncBtn.disabled = false;
+                    }
+                }, 2000);
+            }
+        }
+
+        /**
+         * Set up auto-refresh interval for dashboard cards (every 5 minutes)
+         */
+        function setupAutoRefresh() {
+            const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+            
+            // Set up interval for automatic refreshes
+            const refreshInterval = setInterval(() => {
+                console.log('⏱️ Running 5-minute auto-refresh...');
+                refreshAllCards();
+            }, REFRESH_INTERVAL);
+            
+            // Store interval ID for potential cleanup
+            window.dashboardRefreshInterval = refreshInterval;
+            
+            console.log('✅ Auto-refresh enabled (every 5 minutes)');
+        }
+
+        /**
          * Initialize all data loading on page ready
          */
         function initDashboard() {
@@ -1136,6 +1227,9 @@
             loadWeeklyCommitsChart();
             loadTodayQuests();
             setupQuestForm();
+            
+            // Set up auto-refresh every 5 minutes
+            setupAutoRefresh();
         }
 
         /**
@@ -1381,6 +1475,10 @@
         }
 
         // Set up AI button event listeners
+        const syncBtn = document.getElementById('syncBtn');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', syncGitHub);
+        }
         document.getElementById('aiReviewBtn').addEventListener('click', openAIReview);
         document.getElementById('suggestTasksBtn').addEventListener('click', suggestAndAddTasks);
 
