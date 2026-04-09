@@ -1305,6 +1305,9 @@
             loadWeeklyCommitsChart();
             loadTodayQuests();
             setupQuestForm();
+            
+            // Set up auto-refresh every 5 minutes
+            setupAutoRefresh();
         }
 
         /**
@@ -1543,6 +1546,28 @@
         /**
          * Sync GitHub commits from GitHub API to database
          */
+        /**
+         * Refresh all dashboard cards with fresh data from the API
+         */
+        async function refreshAllCards() {
+            console.log('🔄 Refreshing all dashboard cards...');
+            try {
+                // Load all data in parallel for better performance
+                await Promise.allSettled([
+                    loadStreakData(),
+                    loadTodayCommits(),
+                    loadStats(),
+                    loadWeeklyCommitsChart()
+                ]);
+                console.log('✅ All cards refreshed successfully');
+            } catch (error) {
+                console.error('Error during card refresh:', error);
+            }
+        }
+
+        /**
+         * Force sync GitHub data and refresh all cards
+         */
         async function syncGitHub() {
             const syncBtn = document.getElementById('syncBtn');
             const originalText = syncBtn.textContent;
@@ -1554,14 +1579,14 @@
                 const response = await fetchAPI('/commits/sync', { method: 'POST' });
                 
                 syncBtn.textContent = '✅ Sync Complete!';
+                console.log('✅ GitHub sync completed:', response);
+                
+                // Show sync results
                 alert(`✅ Synced Successfully!\n\nTotal Fetched: ${response.total_fetched}\nNew Records: ${response.new_synced}\nDuplicates Skipped: ${response.duplicates_skipped}\n\n${response.message}`);
                 
                 // Reload all data to reflect the new commits
                 setTimeout(() => {
-                    loadStats();
-                    loadStreakData();
-                    loadTodayCommits();
-                    loadWeeklyCommitsChart();
+                    refreshAllCards();
                 }, 500);
                 
                 // Reset button after 2 seconds
@@ -1581,6 +1606,25 @@
                     syncBtn.disabled = false;
                 }, 2000);
             }
+        }
+
+        /**
+         * Set up auto-refresh interval for dashboard cards (every 5 minutes)
+         */
+        function setupAutoRefresh() {
+            const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+            
+            // Initial refresh on first load (already done in initDashboard)
+            // Then set up interval for automatic refreshes
+            const refreshInterval = setInterval(() => {
+                console.log('⏱️ Running 5-minute auto-refresh...');
+                refreshAllCards();
+            }, REFRESH_INTERVAL);
+            
+            // Store interval ID for potential cleanup
+            window.dashboardRefreshInterval = refreshInterval;
+            
+            console.log('✅ Auto-refresh enabled (every 5 minutes)');
         }
 
         // Set up AI button event listeners
