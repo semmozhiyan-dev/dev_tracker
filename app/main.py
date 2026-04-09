@@ -14,6 +14,8 @@ from app.models import Commit, Task, TaskStatus
 from app.trainer import get_trainer_message
 from app.analyzer import analyze_with_groq, get_task_suggestions
 from groq import Groq
+from apscheduler.schedulers.background import BackgroundScheduler
+import atexit
 
 # ==================== Pydantic Request/Response Models ====================
 
@@ -104,7 +106,7 @@ app.add_middleware(
 # Initialize database on startup
 @app.on_event("startup")
 def startup_event():
-    """Initialize database and validate configuration when the app starts."""
+    """Initialize database, validate configuration, sync GitHub data, and start background scheduler."""
     try:
         validate_config()
         print("✅ Configuration validated successfully")
@@ -114,6 +116,35 @@ def startup_event():
     
     init_db()
     print("✅ Database initialized successfully")
+    
+    # Sync GitHub commits on startup
+    print("🔄 Syncing GitHub commits on startup...")
+    try:
+        db = next(get_db())
+        _sync_github_commits(db)
+        db.close()
+        print("✅ Initial GitHub sync completed successfully")
+    except Exception as e:
+        print(f"⚠️ Initial GitHub sync failed: {str(e)}")
+    
+    # Start background scheduler for periodic syncs
+    scheduler = BackgroundScheduler()
+    
+    # Schedule GitHub sync every 30 minutes
+    scheduler.add_job(
+        func=_sync_github_commits_background,
+        trigger="interval",
+        minutes=30,
+        id="github_sync_job",
+        name="Sync GitHub commits every 30 minutes",
+        replace_existing=True
+    )
+    
+    scheduler.start()
+    print("✅ Background scheduler started - will sync GitHub commits every 30 minutes")
+    
+    # Shut down the scheduler when the app exits
+    atexit.register(lambda: scheduler.shutdown())
 
 
 # Mount static files
@@ -271,6 +302,82 @@ def get_github_commits(username: Optional[str] = None):
     return _fetch_github_commits(username)
 
 
+def _sync_github_commits(db: Session, username: Optional[str] = None) -> dict:
+    """
+    Helper function to sync GitHub commits to database.
+    
+    Args:
+        db: Database session
+        username: GitHub username (override env var if provided)
+    
+    Returns:
+        Dictionary with sync results
+    """
+    try:
+        # Fetch commits from GitHub
+        github_commits = _fetch_github_commits(username)
+        
+        total_fetched = len(github_commits)
+        new_synced = 0
+        duplicates_skipped = 0
+        
+        for commit_data in github_commits:
+            # Parse date string to datetime.date object
+            date_obj = datetime.strptime(commit_data["date"], "%Y-%m-%d").date()
+            repo = commit_data["repo"]
+            count = commit_data["commit_count"]
+            
+            # Check if this date + repo combination already exists
+            existing = db.query(Commit).filter(
+                Commit.date == date_obj,
+                Commit.repo == repo
+            ).first()
+            
+            if existing:
+                # Skip duplicate
+                duplicates_skipped += 1
+            else:
+                # Create new commit record
+                new_commit = Commit(
+                    date=date_obj,
+                    repo=repo,
+                    count=count
+                )
+                db.add(new_commit)
+                new_synced += 1
+        
+        # Commit all new records to database
+        if new_synced > 0:
+            db.commit()
+        
+        return {
+            "status": "success",
+            "total_fetched": total_fetched,
+            "new_synced": new_synced,
+            "duplicates_skipped": duplicates_skipped,
+            "message": f"Successfully synced {new_synced} new commit records"
+        }
+    except Exception as e:
+        print(f"❌ GitHub sync error: {str(e)}")
+        raise
+
+
+def _sync_github_commits_background():
+    """
+    Background sync function for APScheduler.
+    Creates its own database session and syncs GitHub commits.
+    """
+    try:
+        db = next(get_db())
+        try:
+            result = _sync_github_commits(db)
+            print(f"✅ Background sync completed: {result['message']}")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"⚠️ Background sync error: {str(e)}")
+
+
 @app.post("/commits/sync")
 def sync_commits(username: Optional[str] = None, db: Session = Depends(get_db)):
     """
@@ -295,49 +402,8 @@ def sync_commits(username: Optional[str] = None, db: Session = Depends(get_db)):
         }
     """
     try:
-        # Fetch commits from GitHub
-        github_commits = _fetch_github_commits(username)
-        
-        total_fetched = len(github_commits)
-        new_synced = 0
-        duplicates_skipped = 0
-        
-        for commit_data in github_commits:
-            # Parse date string to datetime.date object
-            date_obj = datetime.strptime(commit_data["date"], "%Y-%m-%d").date()
-            repo = commit_data["repo"]
-            count = commit_data["commit_count"]
-            
-            # Check if this date + repo combination already exists
-            existing = db.query(Commit).filter(
-                Commit.date == date_obj,
-                Commit.repo == repo
-            ).first()
-            
-            if existing:
-                # Skip duplicate - but optionally update count
-                duplicates_skipped += 1
-            else:
-                # Create new commit record
-                new_commit = Commit(
-                    date=date_obj,
-                    repo=repo,
-                    count=count
-                )
-                db.add(new_commit)
-                new_synced += 1
-        
-        # Commit all new records to database
-        if new_synced > 0:
-            db.commit()
-        
-        return {
-            "status": "success",
-            "total_fetched": total_fetched,
-            "new_synced": new_synced,
-            "duplicates_skipped": duplicates_skipped,
-            "message": f"Successfully synced {new_synced} new commit records"
-        }
+        result = _sync_github_commits(db, username)
+        return result
     
     except HTTPException:
         # Re-raise HTTP exceptions from GitHub API
@@ -354,18 +420,19 @@ def sync_commits(username: Optional[str] = None, db: Session = Depends(get_db)):
 @app.get("/commits/weekly", response_model=List[CommitResponse])
 def get_commits_weekly(db: Session = Depends(get_db)):
     """
-    Get total commits per day for the last 7 days.
+    Get total commits per day for the last 7 days (including days with 0 commits).
     
     Queries the database for all commit entries from the past 7 days,
     groups them by date, and returns the total commit count per day.
+    For each day without commits, returns 0.
     
     Returns:
-        List of daily commit summaries
+        List of daily commit summaries for all 7 days
     """
     try:
         # Calculate date range: last 7 days from today
         today = date.today()
-        seven_days_ago = today - timedelta(days=7)
+        seven_days_ago = today - timedelta(days=6)  # Include today + 6 days ago = 7 days
         
         # Query commits from the last 7 days
         commits = db.query(Commit).filter(
@@ -380,12 +447,14 @@ def get_commits_weekly(db: Session = Depends(get_db)):
             # Type ignore: SQLAlchemy Column values are ints at runtime
             daily_totals[commit.date] = daily_totals[commit.date] + count_val  # type: ignore
         
-        # Convert to list format, sorted by date descending
+        # Create result with all 7 days, filling missing days with 0
         result = []
-        for date_key in sorted(daily_totals.keys(), reverse=True):
+        for day_offset in range(6, -1, -1):  # 6 days ago to today (7 days total)
+            current_date = today - timedelta(days=day_offset)
+            total_commits = daily_totals.get(current_date, 0)
             result.append(CommitResponse(
-                date=date_key.isoformat(),
-                total_commits=daily_totals[date_key]
+                date=current_date.isoformat(),
+                total_commits=total_commits
             ))
         
         return result
